@@ -7,29 +7,26 @@
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
     .grid { display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+
     h1 { margin: 0 0 12px 0; font-size: 22px; }
     h2 { margin: 0 0 10px 0; font-size: 16px; }
     .btn { padding: 11px 14px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; font-size: 14px; display:inline-block; text-decoration:none; }
     .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
     .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
-    .btn:disabled { opacity: .6; cursor: not-allowed; }
     .muted { color:#666; font-size: 13px; }
     .warn { background:#fff7ed; border:1px solid #fed7aa; padding:10px; border-radius:10px; }
     pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid #eee; padding: 12px; border-radius: 12px; }
 
-    /* Sidebar */
-    .split { display:flex; gap: 14px; align-items: stretch; }
-    .sidebar { width: 260px; border-right: 1px solid #eee; padding-right: 12px; }
-    .content { flex: 1; min-width: 0; }
-    .history { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-    .hist-item {
-      display:block; text-decoration:none; color:#111;
-      border: 1px solid #eee; border-radius: 10px; padding: 10px;
-      background: #fff;
+    .right-grid { display:grid; grid-template-columns: 320px 1fr; gap:16px; }
+    .history-title { font-size: 13px; color:#444; margin-bottom: 8px; }
+    .history-card {
+      display:block; text-decoration:none; color: inherit;
+      border: 1px solid #ddd; border-radius: 10px; padding: 10px 12px;
+      margin-bottom: 10px;
     }
-    .hist-item:hover { border-color: #ddd; background: #fafafa; }
-    .hist-item.selected { border-color: #2b6cb0; background: #eef6ff; }
-    .hist-meta { font-size: 12px; color:#666; margin-top: 4px; }
+    .history-card.active { border-color:#2b6cb0; box-shadow: 0 0 0 2px rgba(43,108,176,.12); background:#f5f9ff; }
+    .history-main { font-weight: 600; }
+    .history-sub { font-size: 12px; color:#666; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -49,12 +46,11 @@
         </label>
         <div class="muted">Default is fast mode (mistral).</div>
 
-        <!-- NEW: Force new -->
-        <label style="display:block; margin: 10px 0 0;">
+        <label style="display:block; margin: 12px 0 6px 0;">
           <input type="checkbox" name="force_new" value="1" />
-          Force new recipe (ignore cache)
+          <b>Force new recipe</b> (ignore cache)
         </label>
-        <div class="muted">Otherwise we reuse a saved recipe for the same preferences (within cache age).</div>
+        <div class="muted">Otherwise we reuse a saved recipe for the same preferences (within {{ cache_age_days }} days).</div>
 
         <div style="margin-top: 12px;">
           <button class="btn btn-primary" type="submit">Generate Recipe</button>
@@ -85,33 +81,33 @@
         </div>
       {% endif %}
 
-      <div class="split">
-        <!-- Sidebar history -->
-        <div class="sidebar">
-          <div class="muted">History</div>
+      <div class="right-grid">
+        <!-- History -->
+        <div>
+          <div class="history-title">History</div>
 
-          {% if recipe_history and recipe_history|length > 0 %}
-            <div class="history">
-              {% for r in recipe_history %}
-                <a
-                  class="hist-item {% if r.is_selected %}selected{% endif %}"
-                  href="/my-recipe?token={{ token }}&qm={% if quality_mode %}1{% else %}0{% endif %}&rid={{ r.id }}"
-                >
-                  <div><b>#{{ r.id }}</b></div>
-                  <div class="hist-meta">{{ r.created_at_human }}</div>
-                  <div class="hist-meta">Model: {{ r.model }}</div>
-                </a>
-              {% endfor %}
-            </div>
+          {% if history and history|length > 0 %}
+            {% for r in history %}
+              {% set is_active = (selected_recipe_id == r.id) %}
+              <a class="history-card {% if is_active %}active{% endif %}"
+                 href="/my-recipe?token={{ token }}&qm={1 if quality_mode else 0}&rid={{ r.id }}">
+                <div class="history-main">
+                  {{ r.title if r.title else ('#' ~ r.id) }}
+                </div>
+                <div class="history-sub">
+                  {{ r.model }}<br/>
+                  {{ r.created_at }}
+                </div>
+              </a>
+            {% endfor %}
           {% else %}
-            <div class="muted" style="margin-top:8px;">No saved recipes yet.</div>
+            <div class="muted">No recipes yet.</div>
           {% endif %}
         </div>
 
-        <!-- Main content -->
-        <div class="content">
+        <!-- Selected -->
+        <div>
           <h2 style="margin-top:0;">Selected recipe</h2>
-
           {% if recipe_text %}
             <div class="muted">Model used: <b>{{ recipe_model_used }}</b></div>
             <pre>{{ recipe_text }}</pre>

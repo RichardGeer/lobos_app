@@ -2,11 +2,12 @@ import os
 import json
 import time
 import hashlib
-from typing import Optional, Dict, List, Any, Tuple
+import re
+from typing import Optional, Dict, List, Any
 
 import jwt
 import requests
-from fastapi import FastAPI, Request, Form
+from fastapi import FastAPI, Request, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, Column, Integer, String, Text, BigInteger, Boolean
@@ -22,24 +23,13 @@ DATABASE_URL = os.getenv(
 )
 
 OLLAMA_BASE_URL = os.getenv("LOBOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
-
 FAST_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_FAST", "mistral:latest")
 QUALITY_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_QUALITY", "llama3.1:8b-instruct-q8_0")
 
-TIMEOUT_FAST = int(os.getenv("LOBOS_OLLAMA_TIMEOUT_FAST", "240"))
-TIMEOUT_QUALITY = int(os.getenv("LOBOS_OLLAMA_TIMEOUT_QUALITY", "480"))
-RECIPE_MAX_CACHE_AGE_DAYS = int(os.getenv("LOBOS_RECIPE_MAX_CACHE_AGE_DAYS", "7"))
-JWT_SECRET = os.getenv("LOBOS_JWT_SECRET", "")
-JWT_ISSUER = os.getenv("LOBOS_JWT_ISSUER", "")
+RECIPE_MAX_CACHE_AGE_IN_DAYS = int(os.getenv("RECIPE_MAX_CACHE_AGE_IN_DAYS", "7"))
 
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
-SessionLocal = sessionmaker(
-    bind=engine,
-    autocommit=False,
-    autoflush=False,
-    expire_on_commit=False,  # prevents DetachedInstanceError after session closes
-)
-
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base = declarative_base()
 
 app = FastAPI()
@@ -65,7 +55,7 @@ class UserProfile(Base):
     email = Column(String(256), nullable=True)
     first_name = Column(String(128), nullable=True)
     last_name = Column(String(128), nullable=True)
-    roles = Column(Text, nullable=True)  # json string or plain string
+    roles = Column(Text, nullable=True)
 
 
 class RecipeResult(Base):
@@ -82,12 +72,16 @@ class RecipeResult(Base):
     model = Column(String(128), nullable=True)
     prompt_hash = Column(String(64), nullable=True)
 
+    # these exist in your DB (you showed them)
+    title = Column(String(256), nullable=True)
+    preview = Column(Text, nullable=True)
+
 
 class PreferenceOption(Base):
     __tablename__ = "preference_options"
 
     id = Column(Integer, primary_key=True)
-    category = Column(String(64), nullable=False)   # eating_style | meal_type | macro_preset | prep
+    category = Column(String(64), nullable=False)  # eating_style | meal_type | macro_preset | prep
     value = Column(String(256), nullable=False)
     sort_order = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -102,55 +96,64 @@ Base.metadata.create_all(bind=engine)
 def now_ts() -> int:
     return int(time.time())
 
-
-def decode_token(token: str) -> Dict[str, Any]:
-    """
-    Verify when secret exists; otherwise decode without signature (dev-friendly).
-    """
-    if not token:
-        return {}
-
-    if JWT_SECRET:
-        try:
-            kwargs: Dict[str, Any] = {"algorithms": ["HS256"]}
-            if JWT_ISSUER:
-                kwargs["issuer"] = JWT_ISSUER
-            return jwt.decode(token, JWT_SECRET, **kwargs)
-        except Exception:
-            # fall back to unverified decode so you can still test
-            pass
-
-    try:
-        return jwt.decode(token, options={"verify_signature": False})
-    except Exception:
-        return {}
-
+def clean_title(t: str) -> str:
+    if not t:
+        return ""
+    t = t.strip()
+    # remove leading markdown header
+    if t.startswith("#"):
+        t = t.lstrip("#").strip()
+    # remove surrounding bold markers
+    if t.startswith("**") and t.endswith("**") and len(t) >= 4:
+        t = t[2:-2].strip()
+    return t
 
 def get_user_id_from_token(token: str) -> Optional[str]:
-    payload = decode_token(token)
-    sub = payload.get("sub")
-    if sub is None:
-        return None
-    return str(sub)
-
-
-def roles_to_human(roles_val: Optional[str]) -> str:
-    if not roles_val:
-        return ""
-    # roles_val may already be "administrator" or may be JSON string ["administrator"]
+    """Decode without verifying signature; we just need stable 'sub'."""
     try:
-        parsed = json.loads(roles_val)
-        if isinstance(parsed, list):
-            return ", ".join(str(x) for x in parsed)
+        payload = jwt.decode(token, options={"verify_signature": False})
+        sub = payload.get("sub", None)
+        return str(sub) if sub is not None else None
     except Exception:
-        pass
-    return str(roles_val)
+        return None
+
+
+def token_identity_from_jwt(token: str) -> Dict[str, Any]:
+    try:
+        payload = jwt.decode(token, options={"verify_signature": False})
+        return {
+            "email": payload.get("email"),
+            "first_name": payload.get("first_name"),
+            "last_name": payload.get("last_name"),
+            "roles": payload.get("roles") or [],
+        }
+    except Exception:
+        return {"email": None, "first_name": None, "last_name": None, "roles": []}
+
+
+def roles_to_human(roles: Any) -> str:
+    if not roles:
+        return ""
+    if isinstance(roles, list):
+        return ", ".join([str(r) for r in roles])
+    # if stored JSON string, try parse
+    if isinstance(roles, str):
+        try:
+            x = json.loads(roles)
+            if isinstance(x, list):
+                return ", ".join([str(r) for r in x])
+        except Exception:
+            pass
+    return str(roles)
 
 
 def load_options(db) -> Dict[str, List[str]]:
+    wanted = ["eating_style", "meal_type", "macro_preset", "prep"]
+    opts: Dict[str, List[str]] = {k: [] for k in wanted}
+
     rows = (
         db.query(PreferenceOption)
-        .filter(PreferenceOption.is_active == True)  # noqa: E712
+        .filter(PreferenceOption.is_active.is_(True))
         .order_by(
             PreferenceOption.category.asc(),
             PreferenceOption.sort_order.asc(),
@@ -159,177 +162,172 @@ def load_options(db) -> Dict[str, List[str]]:
         .all()
     )
 
-    out: Dict[str, List[str]] = {"eating_style": [], "meal_type": [], "macro_preset": [], "prep": []}
     for r in rows:
-        if r.category in out:
-            out[r.category].append(r.value)
-    return out
+        if r.category in opts:
+            opts[r.category].append(r.value)
+
+    # fallback so UI doesn't break
+    if not opts["eating_style"]:
+        opts["eating_style"] = ["No Preference"]
+    if not opts["meal_type"]:
+        opts["meal_type"] = ["Dinner"]
+    if not opts["macro_preset"]:
+        opts["macro_preset"] = ["40/40/20 (Protein-Enhanced Lean)"]
+    if not opts["prep"]:
+        opts["prep"] = ["Standard"]
+
+    return opts
 
 
-def build_prompt(profile: UserProfile) -> str:
+def profile_to_view(p: UserProfile) -> Dict[str, Any]:
+    return {
+        "user_id": p.user_id,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+        "eating_style": p.eating_style,
+        "meal_type": p.meal_type,
+        "macro_preset": p.macro_preset,
+        "prep": p.prep,
+        "email": p.email,
+        "first_name": p.first_name,
+        "last_name": p.last_name,
+        "roles": p.roles,
+    }
+
+
+def build_prompt(profile_view: Dict[str, Any]) -> str:
     return f"""Create a healthy recipe.
 
-Eating Style: {profile.eating_style}
-Meal Type: {profile.meal_type}
-Macro Preset: {profile.macro_preset}
-Preparation: {profile.prep}
+Eating Style: {profile_view.get("eating_style")}
+Meal Type: {profile_view.get("meal_type")}
+Macro Preset: {profile_view.get("macro_preset")}
+Preparation: {profile_view.get("prep")}
 
 Output clean markdown format.
 """
 
 
-def prefs_payload(profile: UserProfile) -> Dict[str, str]:
-    return {
-        "eating_style": profile.eating_style,
-        "meal_type": profile.meal_type,
-        "macro_preset": profile.macro_preset,
-        "prep": profile.prep,
-    }
-
-
-def hash_payload(payload: Dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
-
-
-def call_ollama(model: str, prompt: str, timeout_s: int) -> str:
+def call_ollama(model: str, prompt: str) -> str:
     url = f"{OLLAMA_BASE_URL}/api/generate"
     resp = requests.post(
         url,
         json={"model": model, "prompt": prompt, "stream": False},
-        timeout=timeout_s,
+        timeout=480 if model == QUALITY_MODEL else 300,
     )
     resp.raise_for_status()
     data = resp.json()
     return (data.get("response") or "").strip()
 
 
-def get_latest_recipe(db, user_id: str) -> Optional[RecipeResult]:
+def request_payload_from_profile(profile_view: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "eating_style": profile_view.get("eating_style"),
+        "meal_type": profile_view.get("meal_type"),
+        "macro_preset": profile_view.get("macro_preset"),
+        "prep": profile_view.get("prep"),
+    }
+
+
+def hash_request(payload: Dict[str, Any]) -> str:
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def extract_title_and_preview(text: str) -> (str, str):
+    t = (text or "").strip()
+
+    # Prefer first markdown H1: "# Title"
+    m = re.search(r"^\s*#\s+(.+)\s*$", t, flags=re.MULTILINE)
+ 
+    if m:
+       
+        title = m.group(1).strip()
+    else:
+        # Fallback: "Title: something"
+        m2 = re.search(r"^\s*Title:\s*(.+)\s*$", t, flags=re.MULTILINE | re.IGNORECASE)
+        title = m2.group(1).strip() if m2 else ""
+
+    if not title:
+        # last fallback: first non-empty line, clipped
+        for line in t.splitlines():
+            line = line.strip()
+            if line:
+                title = line[:120]
+                break
+
+    preview = t.replace("\r", "")
+    preview = re.sub(r"\s+", " ", preview).strip()
+    preview = preview[:140]
+
+    # keep title short for UI cards
+    title = (title or "").strip()
+    if len(title) > 72:
+        title = title[:69].rstrip() + "..."
+
+    return title, preview
+
+
+def cache_cutoff_ts() -> int:
+    return now_ts() - (RECIPE_MAX_CACHE_AGE_IN_DAYS * 86400)
+
+
+def get_cached_recipe(db, user_id: str, request_hash: str) -> Optional[RecipeResult]:
+    cutoff = cache_cutoff_ts()
     return (
         db.query(RecipeResult)
         .filter(RecipeResult.user_id == user_id)
+        .filter(RecipeResult.request_hash == request_hash)
+        .filter(RecipeResult.created_at >= cutoff)
         .order_by(RecipeResult.created_at.desc())
         .first()
     )
 
-def get_latest_cached_for_request(
-    db,
-    user_id: str,
-    request_hash: str,
-    model: str,
-    max_age_days: int,
-) -> Optional[RecipeResult]:
-    min_created_at = now_ts() - (max_age_days * 86400)
 
+def list_recipes_for_request(db, user_id: str, request_hash: str, limit: int = 50) -> List[RecipeResult]:
     return (
         db.query(RecipeResult)
-        .filter(
-            RecipeResult.user_id == user_id,
-            RecipeResult.request_hash == request_hash,
-            RecipeResult.model == model,
-            RecipeResult.created_at >= min_created_at,
-        )
-        .order_by(RecipeResult.created_at.desc())
-        .first()
-    )
-
-def get_recent_history_for_request(
-    db,
-    user_id: str,
-    request_hash: str,
-    limit: int = 10,
-) -> List[RecipeResult]:
-    return (
-        db.query(RecipeResult)
-        .filter(
-            RecipeResult.user_id == user_id,
-            RecipeResult.request_hash == request_hash,
-        )
+        .filter(RecipeResult.user_id == user_id)
+        .filter(RecipeResult.request_hash == request_hash)
         .order_by(RecipeResult.created_at.desc())
         .limit(limit)
         .all()
     )
 
 
-def ensure_profile(db, user_id: str, token_payload: Dict[str, Any]) -> Tuple[UserProfile, Dict[str, List[str]]]:
-    opts = load_options(db)
-
-    # safe defaults even if table is empty
-    default_eating = opts["eating_style"][0] if opts["eating_style"] else "No Preference"
-    default_meal = opts["meal_type"][0] if opts["meal_type"] else "Dinner"
-    default_macro = opts["macro_preset"][0] if opts["macro_preset"] else "40/40/20 (Protein-Enhanced Lean)"
-    default_prep = opts["prep"][0] if opts["prep"] else "Standard"
-
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-    if not profile:
-        profile = UserProfile(
-            user_id=user_id,
-            created_at=now_ts(),
-            updated_at=now_ts(),
-            eating_style=default_eating,
-            meal_type=default_meal,
-            macro_preset=default_macro,
-            prep=default_prep,
-            email=token_payload.get("email"),
-            first_name=token_payload.get("first_name"),
-            last_name=token_payload.get("last_name"),
-            roles=json.dumps(token_payload.get("roles") or []),
-        )
-        db.add(profile)
-        db.commit()
-        return profile, opts
-
-    # keep identity fields synced (nice UX)
-    profile.email = token_payload.get("email")
-    profile.first_name = token_payload.get("first_name")
-    profile.last_name = token_payload.get("last_name")
-    if token_payload.get("roles") is not None:
-        try:
-            profile.roles = json.dumps(token_payload.get("roles"))
-        except Exception:
-            profile.roles = str(token_payload.get("roles"))
-
-    profile.updated_at = now_ts()
-    db.commit()
-
-    return profile, opts
+def get_recipe_by_id(db, user_id: str, rid: int) -> Optional[RecipeResult]:
+    return (
+        db.query(RecipeResult)
+        .filter(RecipeResult.user_id == user_id)
+        .filter(RecipeResult.id == rid)
+        .first()
+    )
 
 
-def generate_or_get_cached_recipe(db, profile: UserProfile, want_quality: bool, force_new: bool) -> RecipeResult:
+def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], want_quality: bool) -> RecipeResult:
     model = QUALITY_MODEL if want_quality else FAST_MODEL
-    timeout_s = TIMEOUT_QUALITY if want_quality else TIMEOUT_FAST
+    prompt = build_prompt(profile_view)
 
-    payload = prefs_payload(profile)
-    request_hash = hash_payload(payload)
-
-    # cache hit (same prefs + same model + within age window)
-    if not force_new:
-        cached = get_latest_cached_for_request(
-            db,
-            profile.user_id,
-            request_hash,
-            model,
-            RECIPE_MAX_CACHE_AGE_DAYS,
-        )
-        if cached:
-            return cached
-
-    prompt = build_prompt(profile)
+    req_payload = request_payload_from_profile(profile_view)
+    req_hash = hash_request(req_payload)
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
-    response_text = call_ollama(model, prompt, timeout_s)
+    response_text = call_ollama(model, prompt)
+    title, preview = extract_title_and_preview(response_text)
 
-    result = RecipeResult(
-        user_id=profile.user_id,
+    r = RecipeResult(
+        user_id=user_id,
         created_at=now_ts(),
-        request_hash=request_hash,
-        request_json=json.dumps(payload),
+        request_hash=req_hash,
+        request_json=json.dumps(req_payload),
         response_text=response_text,
         model=model,
         prompt_hash=prompt_hash,
+        title=title,
+        preview=preview,
     )
-    db.add(result)
+
+    db.add(r)
     db.commit()
-    return result
+    return r
 
 # ============================================================
 # ROUTES
@@ -339,23 +337,46 @@ def generate_or_get_cached_recipe(db, profile: UserProfile, want_quality: bool, 
 def landing(request: Request, token: str):
     user_id = get_user_id_from_token(token)
     if not user_id:
-        return HTMLResponse("Invalid token (missing sub).", status_code=400)
+        raise HTTPException(status_code=401, detail="Invalid token (missing sub)")
 
-    payload = decode_token(token)
+    ident = token_identity_from_jwt(token)
 
     with SessionLocal() as db:
-        profile, opts = ensure_profile(db, user_id, payload)
-        roles_human = roles_to_human(profile.roles)
+        opts = load_options(db)
+
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        if not profile:
+            profile = UserProfile(
+                user_id=user_id,
+                created_at=now_ts(),
+                updated_at=now_ts(),
+                eating_style=opts["eating_style"][0],
+                meal_type=opts["meal_type"][0],
+                macro_preset=opts["macro_preset"][0],
+                prep=opts["prep"][0],
+            )
+            db.add(profile)
+            db.commit()
+
+        # sync identity for display
+        profile.email = ident.get("email")
+        profile.first_name = ident.get("first_name")
+        profile.last_name = ident.get("last_name")
+        if ident.get("roles") is not None:
+            profile.roles = json.dumps(ident.get("roles"))
+        profile.updated_at = now_ts()
+        db.commit()
+
+        profile_view = profile_to_view(profile)
+        roles_human = roles_to_human(profile_view.get("roles"))
 
     return templates.TemplateResponse(
         "landing.html",
         {
             "request": request,
             "token": token,
-            "profile": profile,
+            "profile": profile_view,
             "roles_human": roles_human,
-
-            # must match your landing.html loops:
             "eating_style_options": opts["eating_style"],
             "meal_type_options": opts["meal_type"],
             "macro_preset_options": opts["macro_preset"],
@@ -374,77 +395,71 @@ def prefs_save(
 ):
     user_id = get_user_id_from_token(token)
     if not user_id:
-        return HTMLResponse("Invalid token (missing sub).", status_code=400)
-
-    payload = decode_token(token)
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     with SessionLocal() as db:
-        profile, _opts = ensure_profile(db, user_id, payload)
-
-        profile.eating_style = eating_style
-        profile.meal_type = meal_type
-        profile.macro_preset = macro_preset
-        profile.prep = prep
-        profile.updated_at = now_ts()
-        db.commit()
+        profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+        if not profile:
+            # create if missing
+            profile = UserProfile(
+                user_id=user_id,
+                created_at=now_ts(),
+                updated_at=now_ts(),
+                eating_style=eating_style,
+                meal_type=meal_type,
+                macro_preset=macro_preset,
+                prep=prep,
+            )
+            db.add(profile)
+            db.commit()
+        else:
+            profile.eating_style = eating_style
+            profile.meal_type = meal_type
+            profile.macro_preset = macro_preset
+            profile.prep = prep
+            profile.updated_at = now_ts()
+            db.commit()
 
     return RedirectResponse(url=f"/landing?token={token}", status_code=302)
 
 
 @app.get("/my-recipe", response_class=HTMLResponse)
-def my_recipe(request: Request, token: str):
+def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = None):
     user_id = get_user_id_from_token(token)
     if not user_id:
-        return HTMLResponse("Invalid token (missing sub).", status_code=400)
+        raise HTTPException(status_code=401, detail="Invalid token")
 
-    qm = request.query_params.get("qm", "0")
-    quality_mode = qm == "1"
-
-    rid_raw = request.query_params.get("rid")
-    selected_rid: Optional[int] = None
-    if rid_raw:
-        try:
-            selected_rid = int(rid_raw)
-        except Exception:
-            selected_rid = None
+    quality_mode = (qm == "1")
 
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         if not profile:
-            profile, _opts = ensure_profile(db, user_id, decode_token(token))
+            return RedirectResponse(url=f"/landing?token={token}", status_code=302)
 
-        # Compute current prefs fingerprint for "same prefs" history
-        payload = prefs_payload(profile)
-        request_hash = hash_payload(payload)
+        profile_view = profile_to_view(profile)
+        req_hash = hash_request(request_payload_from_profile(profile_view))
 
-        # History (same prefs)
-        history_same_prefs = get_recent_history_for_request(db, user_id, request_hash, limit=15)
+        history = list_recipes_for_request(db, user_id, req_hash, limit=50)
 
-        # Which recipe to display?
-        shown: Optional[RecipeResult] = None
-        if selected_rid is not None:
-            shown = (
-                db.query(RecipeResult)
-                .filter(RecipeResult.id == selected_rid, RecipeResult.user_id == user_id)
-                .first()
-            )
+        selected: Optional[RecipeResult] = None
+        if rid is not None:
+            selected = get_recipe_by_id(db, user_id, int(rid))
+        if selected is None:
+            selected = history[0] if history else None
 
-        if not shown:
-            shown = get_latest_recipe(db, user_id)
+        selected_title = (selected.title if selected else "") or ""
+        selected_text = (selected.response_text if selected else "") or ""
+        selected_model = (selected.model if selected else "") or ""
 
-        # Build sidebar items
-        def fmt_ts(ts: int) -> str:
-            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(ts))
-
-        history_items = []
-        for r in history_same_prefs:
-            history_items.append(
+        history_view = []
+        for r in history:
+            history_view.append(
                 {
                     "id": r.id,
                     "created_at": r.created_at,
-                    "created_at_human": fmt_ts(r.created_at),
                     "model": r.model or "",
-                    "is_selected": (shown is not None and r.id == shown.id),
+                    "title": (r.title or "").strip(),
+                    "preview": (r.preview or "").strip(),
                 }
             )
 
@@ -453,14 +468,17 @@ def my_recipe(request: Request, token: str):
         {
             "request": request,
             "token": token,
-            "profile": profile,
             "quality_mode": quality_mode,
-            "recipe_text": shown.response_text if shown else "",
-            "recipe_model_used": shown.model if shown else "",
+            "selected_recipe_id": selected.id if selected else None,
+            "selected_title": selected_title,
+            "recipe_text": selected_text,
+            "recipe_model_used": selected_model,
             "recipe_error": "",
-            "recipe_history": history_items,
+            "history": history_view,
+            "cache_age_days": RECIPE_MAX_CACHE_AGE_IN_DAYS,
         },
     )
+
 
 @app.post("/recipe/generate")
 def recipe_generate(
@@ -470,7 +488,7 @@ def recipe_generate(
 ):
     user_id = get_user_id_from_token(token)
     if not user_id:
-        return HTMLResponse("Invalid token (missing sub).", status_code=400)
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     want_quality = str(quality_mode or "").lower() in ("1", "true", "on", "yes")
     force = str(force_new or "").lower() in ("1", "true", "on", "yes")
@@ -478,30 +496,48 @@ def recipe_generate(
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         if not profile:
-            profile, _opts = ensure_profile(db, user_id, decode_token(token))
+            return RedirectResponse(url=f"/landing?token={token}", status_code=302)
 
-        generate_or_get_cached_recipe(db, profile, want_quality=want_quality, force_new=force)
+        profile_view = profile_to_view(profile)
+        req_hash = hash_request(request_payload_from_profile(profile_view))
+
+        if not force:
+            cached = get_cached_recipe(db, user_id, req_hash)
+            if cached:
+                qm = "1" if want_quality else "0"
+                return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={cached.id}", status_code=302)
+
+        r = generate_and_save_recipe(db, user_id, profile_view, want_quality)
 
     qm = "1" if want_quality else "0"
-    return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}", status_code=302)
-@app.get("/me", response_class=HTMLResponse)
-def me(token: str):
-    payload = decode_token(token)
-    user_id = get_user_id_from_token(token)
-    return HTMLResponse(f"<pre>{json.dumps({'user_id': user_id, 'payload': payload}, indent=2)}</pre>")
+    return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={r.id}", status_code=302)
 
 
 @app.get("/ai-prompt", response_class=HTMLResponse)
 def ai_prompt(token: str):
     user_id = get_user_id_from_token(token)
     if not user_id:
-        return HTMLResponse("Invalid token (missing sub).", status_code=400)
+        raise HTTPException(status_code=401, detail="Invalid token")
 
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         if not profile:
-            profile, _opts = ensure_profile(db, user_id, decode_token(token))
+            raise HTTPException(status_code=404, detail="Profile not found")
 
-        prompt = build_prompt(profile)
+        prompt = build_prompt(profile_to_view(profile))
 
     return HTMLResponse(f"<pre>{prompt}</pre>")
+
+
+@app.get("/me", response_class=HTMLResponse)
+def me(token: str):
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    ident = token_identity_from_jwt(token)
+    return HTMLResponse(
+        "<pre>"
+        + json.dumps({"user_id": user_id, "identity": ident}, indent=2)
+        + "</pre>"
+    )
