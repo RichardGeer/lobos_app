@@ -3,7 +3,7 @@ import json
 import time
 import hashlib
 import re
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 
 import jwt
 import requests
@@ -26,7 +26,10 @@ OLLAMA_BASE_URL = os.getenv("LOBOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434").r
 FAST_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_FAST", "mistral:latest")
 QUALITY_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_QUALITY", "llama3.1:8b-instruct-q8_0")
 
-RECIPE_MAX_CACHE_AGE_IN_DAYS = int(os.getenv("RECIPE_MAX_CACHE_AGE_IN_DAYS", "7"))
+# New env var name (requested) + backward compatible fallback
+RECIPE_MAX_CACHE_AGE_DAYS = int(
+    os.getenv("LOBOS_RECIPE_MAX_CACHE_AGE_DAYS", os.getenv("RECIPE_MAX_CACHE_AGE_IN_DAYS", "7"))
+)
 
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
@@ -72,7 +75,7 @@ class RecipeResult(Base):
     model = Column(String(128), nullable=True)
     prompt_hash = Column(String(64), nullable=True)
 
-    # these exist in your DB (you showed them)
+    # columns you added in DB
     title = Column(String(256), nullable=True)
     preview = Column(Text, nullable=True)
 
@@ -96,20 +99,33 @@ Base.metadata.create_all(bind=engine)
 def now_ts() -> int:
     return int(time.time())
 
+
 def clean_title(t: str) -> str:
+    """
+    Normalize common title formats:
+      - "# Title" -> "Title"
+      - "**Title**" -> "Title"
+      - trims whitespace
+    """
     if not t:
         return ""
     t = t.strip()
-    # remove leading markdown header
+
+    # remove leading markdown header hashes
     if t.startswith("#"):
         t = t.lstrip("#").strip()
+
     # remove surrounding bold markers
     if t.startswith("**") and t.endswith("**") and len(t) >= 4:
         t = t[2:-2].strip()
+
+    # collapse whitespace
+    t = re.sub(r"\s+", " ", t).strip()
     return t
 
+
 def get_user_id_from_token(token: str) -> Optional[str]:
-    """Decode without verifying signature; we just need stable 'sub'."""
+    """Decode without verifying signature; we only need stable 'sub'."""
     try:
         payload = jwt.decode(token, options={"verify_signature": False})
         sub = payload.get("sub", None)
@@ -136,7 +152,6 @@ def roles_to_human(roles: Any) -> str:
         return ""
     if isinstance(roles, list):
         return ", ".join([str(r) for r in roles])
-    # if stored JSON string, try parse
     if isinstance(roles, str):
         try:
             x = json.loads(roles)
@@ -232,42 +247,41 @@ def hash_request(payload: Dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
 
 
-def extract_title_and_preview(text: str) -> (str, str):
+def extract_title_and_preview(text: str) -> Tuple[str, str]:
     t = (text or "").strip()
 
     # Prefer first markdown H1: "# Title"
     m = re.search(r"^\s*#\s+(.+)\s*$", t, flags=re.MULTILINE)
- 
     if m:
-       
-        title = m.group(1).strip()
+        raw_title = m.group(1).strip()
     else:
         # Fallback: "Title: something"
         m2 = re.search(r"^\s*Title:\s*(.+)\s*$", t, flags=re.MULTILINE | re.IGNORECASE)
-        title = m2.group(1).strip() if m2 else ""
+        raw_title = m2.group(1).strip() if m2 else ""
 
-    if not title:
+    if not raw_title:
         # last fallback: first non-empty line, clipped
         for line in t.splitlines():
             line = line.strip()
             if line:
-                title = line[:120]
+                raw_title = line[:120]
                 break
+
+    title = clean_title(raw_title)
+
+    # keep title short for UI cards
+    if len(title) > 72:
+        title = title[:69].rstrip() + "..."
 
     preview = t.replace("\r", "")
     preview = re.sub(r"\s+", " ", preview).strip()
     preview = preview[:140]
 
-    # keep title short for UI cards
-    title = (title or "").strip()
-    if len(title) > 72:
-        title = title[:69].rstrip() + "..."
-
     return title, preview
 
 
 def cache_cutoff_ts() -> int:
-    return now_ts() - (RECIPE_MAX_CACHE_AGE_IN_DAYS * 86400)
+    return now_ts() - (RECIPE_MAX_CACHE_AGE_DAYS * 86400)
 
 
 def get_cached_recipe(db, user_id: str, request_hash: str) -> Optional[RecipeResult]:
@@ -400,7 +414,6 @@ def prefs_save(
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
         if not profile:
-            # create if missing
             profile = UserProfile(
                 user_id=user_id,
                 created_at=now_ts(),
@@ -447,7 +460,7 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
         if selected is None:
             selected = history[0] if history else None
 
-        selected_title = (selected.title if selected else "") or ""
+        selected_title = clean_title((selected.title if selected else "") or "")
         selected_text = (selected.response_text if selected else "") or ""
         selected_model = (selected.model if selected else "") or ""
 
@@ -458,7 +471,7 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
                     "id": r.id,
                     "created_at": r.created_at,
                     "model": r.model or "",
-                    "title": (r.title or "").strip(),
+                    "title": clean_title((r.title or "").strip()),
                     "preview": (r.preview or "").strip(),
                 }
             )
@@ -475,7 +488,7 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
             "recipe_model_used": selected_model,
             "recipe_error": "",
             "history": history_view,
-            "cache_age_days": RECIPE_MAX_CACHE_AGE_IN_DAYS,
+            "cache_age_days": RECIPE_MAX_CACHE_AGE_DAYS,
         },
     )
 
@@ -536,8 +549,4 @@ def me(token: str):
         raise HTTPException(status_code=401, detail="Invalid token")
 
     ident = token_identity_from_jwt(token)
-    return HTMLResponse(
-        "<pre>"
-        + json.dumps({"user_id": user_id, "identity": ident}, indent=2)
-        + "</pre>"
-    )
+    return HTMLResponse("<pre>" + json.dumps({"user_id": user_id, "identity": ident}, indent=2) + "</pre>")
