@@ -1,0 +1,94 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lobos - Preferences</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    .grid { display: grid; grid-template-columns: 420px ; gap: 18px; align-items: start; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    h1 { margin: 0 0 12px 0; font-size: 22px; }
+    h2 { margin: 0 0 10px 0; font-size: 16px; }
+    label { display:block; margin-top: 10px; font-size: 13px; color: #333; }
+    select, input[type="text"] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px; }
+    .btn { padding: 11px 14px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; font-size: 14px; display:inline-block; text-decoration:none; }
+    .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
+    .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
+    .muted { color:#666; font-size: 13px; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f2f2f2; font-size: 12px; margin-left: 6px; }
+    .kv { display:grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 14px; }
+    .kv .k { color:#666; }
+  </style>
+</head>
+<body>
+  <h1>Lobos</h1>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div class="card">
+      <h2>Identity</h2>
+
+      <div class="kv">
+        <div class="k">User ID</div><div>{{ profile.user_id }}</div>
+        <div class="k">Name</div><div>{{ (profile.first_name or "") ~ " " ~ (profile.last_name or "") }}</div>
+        <div class="k">Email</div><div>{{ profile.email or "" }}</div>
+        <div class="k">Roles</div><div>{{ (roles_human or "") }}</div>
+      </div>
+
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+
+      <h2>Preferences <span class="pill">v1</span></h2>
+
+      <form method="post" action="/prefs/save">
+        <input type="hidden" name="token" value="{{ token }}" />
+
+        <label>Eating style</label>
+        <select name="eating_style">
+          {% for v in eating_style_options %}
+            <option value="{{ v }}" {% if profile.eating_style == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Meal type</label>
+        <select name="meal_type">
+          {% for v in meal_type_options %}
+            <option value="{{ v }}" {% if profile.meal_type == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Macro preset</label>
+        <select name="macro_preset">
+          {% for v in macro_preset_options %}
+            <option value="{{ v }}" {% if profile.macro_preset == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+
+        <label>Preparation</label>
+        <select name="prep">
+          {% for v in prep_options %}
+            <option value="{{ v }}" {% if profile.prep == v %}selected{% endif %}>{{ v }}</option>
+          {% endfor %}
+        </select>
+
+        <div style="margin-top: 12px;">
+          <button class="btn btn-save" type="submit">Save Preferences</button>
+        </div>
+
+        <div class="muted" style="margin-top: 8px;">
+          Saved to Postgres. (Later: sync back to WP.)
+        </div>
+      </form>
+
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <a class="btn btn-primary" href="/my-recipe?token={{ token }}">My Recipe</a>
+        <a class="btn" href="/me?token={{ token }}">/me debug</a>
+      </div>
+    </div>
+
+    <!-- RIGHT (intentionally blank now) -->
+    <div></div>
+  </div>
+</body>
+</html>
