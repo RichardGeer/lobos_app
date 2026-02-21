@@ -1,0 +1,25 @@
+[Unit]
+Description=Lobos FastAPI Web (uvicorn)
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vmadmin
+WorkingDirectory=/home/vmadmin/lobos_app
+Environment="LOBOS_OLLAMA_TIMEOUT_QUALITY=480"
+Environment="LOBOS_OLLAMA_BASE_URL=http://52.234.104.138:11434"
+Environment="LOBOS_OLLAMA_MODEL_FAST=mistral:latest"
+Environment="LOBOS_OLLAMA_MODEL_QUALITY=llama3.1:8b-instruct-q8_0"
+Environment="LOBOS_RECIPE_MAX_CACHE_AGE_DAYS=7"
+Environment="LOBOS_JWT_SECRET=5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT"
+Environment="LOBOS_JWT_ISSUER=wp-sim"
+Environment="LOBOS_DATABASE_URL=postgresql+psycopg2://lobos_user:lobos_pass@127.0.0.1:5432/lobos_db"
+
+ExecStart=/home/vmadmin/lobos_app/.venv/bin/uvicorn app:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+

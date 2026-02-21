@@ -16,6 +16,20 @@
     .muted { color:#666; font-size: 13px; }
     .warn { background:#fff7ed; border:1px solid #fed7aa; padding:10px; border-radius:10px; }
     pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid #eee; padding: 12px; border-radius: 12px; }
+
+    /* Sidebar */
+    .split { display:flex; gap: 14px; align-items: stretch; }
+    .sidebar { width: 260px; border-right: 1px solid #eee; padding-right: 12px; }
+    .content { flex: 1; min-width: 0; }
+    .history { display:flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .hist-item {
+      display:block; text-decoration:none; color:#111;
+      border: 1px solid #eee; border-radius: 10px; padding: 10px;
+      background: #fff;
+    }
+    .hist-item:hover { border-color: #ddd; background: #fafafa; }
+    .hist-item.selected { border-color: #2b6cb0; background: #eef6ff; }
+    .hist-meta { font-size: 12px; color:#666; margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -34,6 +48,13 @@
           Quality mode (slower, more consistent formatting)
         </label>
         <div class="muted">Default is fast mode (mistral).</div>
+
+        <!-- NEW: Force new -->
+        <label style="display:block; margin: 10px 0 0;">
+          <input type="checkbox" name="force_new" value="1" />
+          Force new recipe (ignore cache)
+        </label>
+        <div class="muted">Otherwise we reuse a saved recipe for the same preferences (within cache age).</div>
 
         <div style="margin-top: 12px;">
           <button class="btn btn-primary" type="submit">Generate Recipe</button>
@@ -55,7 +76,7 @@
 
     <!-- RIGHT -->
     <div class="card">
-      <h2>Latest recipe</h2>
+      <h2>Recipes (same preferences)</h2>
 
       {% if recipe_error %}
         <div class="warn">
@@ -64,12 +85,41 @@
         </div>
       {% endif %}
 
-      {% if recipe_text %}
-        <div class="muted">Model used: <b>{{ recipe_model_used }}</b></div>
-        <pre>{{ recipe_text }}</pre>
-      {% else %}
-        <div class="muted">No recipe yet. Click “Generate Recipe”.</div>
-      {% endif %}
+      <div class="split">
+        <!-- Sidebar history -->
+        <div class="sidebar">
+          <div class="muted">History</div>
+
+          {% if recipe_history and recipe_history|length > 0 %}
+            <div class="history">
+              {% for r in recipe_history %}
+                <a
+                  class="hist-item {% if r.is_selected %}selected{% endif %}"
+                  href="/my-recipe?token={{ token }}&qm={% if quality_mode %}1{% else %}0{% endif %}&rid={{ r.id }}"
+                >
+                  <div><b>#{{ r.id }}</b></div>
+                  <div class="hist-meta">{{ r.created_at_human }}</div>
+                  <div class="hist-meta">Model: {{ r.model }}</div>
+                </a>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="muted" style="margin-top:8px;">No saved recipes yet.</div>
+          {% endif %}
+        </div>
+
+        <!-- Main content -->
+        <div class="content">
+          <h2 style="margin-top:0;">Selected recipe</h2>
+
+          {% if recipe_text %}
+            <div class="muted">Model used: <b>{{ recipe_model_used }}</b></div>
+            <pre>{{ recipe_text }}</pre>
+          {% else %}
+            <div class="muted">No recipe yet. Click “Generate Recipe”.</div>
+          {% endif %}
+        </div>
+      </div>
     </div>
   </div>
 </body>
