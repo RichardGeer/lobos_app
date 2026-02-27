@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Lobos - Admin</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
+    .grid { display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+    h1 { margin: 0 0 12px 0; font-size: 22px; }
+    h2 { margin: 0 0 10px 0; font-size: 16px; }
+    label { display:block; margin-top: 10px; font-size: 13px; color: #333; }
+    select, input[type="text"], input[type="number"] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 10px 8px; font-size: 14px; vertical-align: top; }
+    th { text-align: left; color:#555; font-weight:600; }
+    .btn { padding: 9px 12px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; font-size: 14px; display:inline-block; text-decoration:none; background:#fff; }
+    .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
+    .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
+    .muted { color:#666; font-size: 13px; }
+    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f2f2f2; font-size: 12px; margin-left: 6px; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .w120 { width: 120px; }
+    .w140 { width: 140px; }
+    .inactive { opacity: .55; }
+    .inline { display:inline; }
+  </style>
+</head>
+<body>
+  <h1>Lobos</h1>
+
+  <div class="grid">
+    <!-- LEFT: add -->
+    <div class="card">
+      <h2>Admin: Preference dropdown options <span class="pill">v1</span></h2>
+      <div class="muted">These control the dropdown lists on /landing.</div>
+
+      <form method="post" action="/admin/option/add" style="margin-top:14px;">
+        <input type="hidden" name="token" value="{{ token }}" />
+
+        <label>Category</label>
+        <select name="category">
+          <option value="eating_style">Eating style</option>
+          <option value="meal_type">Meal type</option>
+          <option value="macro_preset">Macro preset</option>
+          <option value="prep">Preparation</option>
+        </select>
+
+        <label>Display value</label>
+        <input type="text" name="value" placeholder="e.g., High Protein" />
+
+        <label>Sort order (lower shows first)</label>
+        <input type="number" name="sort_order" value="0" />
+
+        <div style="margin-top:12px;">
+          <button class="btn btn-save" type="submit">Add / Enable Option</button>
+        </div>
+      </form>
+
+      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+
+      <div class="row" style="flex-wrap:wrap;">
+        <a class="btn btn-primary" href="/landing?token={{ token }}">Back to Preferences</a>
+        <a class="btn" href="/me?token={{ token }}">/me debug</a>
+      </div>
+    </div>
+
+    <!-- RIGHT: lists -->
+    <div class="card">
+      <h2>Current options</h2>
+
+      {% for cat, rows in grouped.items() %}
+        <h2 style="margin-top:18px;">
+          {{ cat }}
+          <span class="pill">{{ rows|length }}</span>
+        </h2>
+
+        {% if rows|length == 0 %}
+          <div class="muted">No options yet.</div>
+        {% else %}
+          <table>
+            <thead>
+              <tr>
+                <th>Value</th>
+                <th class="w120">Sort</th>
+                <th class="w140">Active</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+                <tr class="{% if not r.is_active %}inactive{% endif %}">
+                  <td>
+                    <form class="inline" method="post" action="/admin/option/update">
+                      <input type="hidden" name="token" value="{{ token }}" />
+                      <input type="hidden" name="option_id" value="{{ r.id }}" />
+                      <input type="text" name="value" value="{{ r.value }}" />
+                  </td>
+                  <td class="w120">
+                      <input type="number" name="sort_order" value="{{ r.sort_order }}" />
+                      <div style="margin-top:8px;">
+                        <button class="btn" type="submit">Save</button>
+                      </div>
+                    </form>
+                  </td>
+                  <td class="w140">
+                    <form method="post" action="/admin/option/toggle">
+                      <input type="hidden" name="token" value="{{ token }}" />
+                      <input type="hidden" name="option_id" value="{{ r.id }}" />
+                      <button class="btn" type="submit">
+                        {% if r.is_active %}Disable{% else %}Enable{% endif %}
+                      </button>
+                    </form>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</body>
+</html>

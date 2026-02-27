@@ -83,6 +83,9 @@
 
       <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
         <a class="btn btn-primary" href="/my-recipe?token={{ token }}">My Recipe</a>
+        {% if is_admin %}
+        <a class="btn" href="/admin?token={{ token }}">Admin</a>
+        {% endif %}
         <a class="btn" href="/me?token={{ token }}">/me debug</a>
       </div>
     </div>

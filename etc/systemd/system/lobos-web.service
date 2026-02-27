@@ -8,7 +8,7 @@ Type=simple
 User=vmadmin
 WorkingDirectory=/home/vmadmin/lobos_app
 Environment="LOBOS_OLLAMA_TIMEOUT_QUALITY=480"
-Environment="LOBOS_OLLAMA_BASE_URL=http://52.234.104.138:11434"
+Environment="LOBOS_OLLAMA_BASE_URL=http://my.ai.com:11434"
 Environment="LOBOS_OLLAMA_MODEL_FAST=mistral:latest"
 Environment="LOBOS_OLLAMA_MODEL_QUALITY=llama3.1:8b-instruct-q8_0"
 Environment="LOBOS_RECIPE_MAX_CACHE_AGE_DAYS=7"
@@ -22,4 +22,3 @@ RestartSec=2
 
 [Install]
 WantedBy=multi-user.target
-

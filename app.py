@@ -343,9 +343,188 @@ def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], wan
     db.commit()
     return r
 
+
+def is_admin_token(token: str) -> bool:
+    ident = token_identity_from_jwt(token)
+    roles = ident.get("roles") or []
+    if isinstance(roles, str):
+        try:
+            roles = json.loads(roles)
+        except Exception:
+            roles = [roles]
+
+    roles_norm = {str(r).strip().lower() for r in (roles or [])}
+    return ("administrator" in roles_norm) or ("admin" in roles_norm)
+
+
+def seed_default_options_if_empty(db) -> None:
+    # Only seed once if table is empty
+    if db.query(PreferenceOption).count() > 0:
+        return
+
+    defaults = [
+        ("eating_style", "High Protein", 10),
+        ("eating_style", "Low Carb", 20),
+        ("eating_style", "No Preference", 999),
+
+        ("meal_type", "Breakfast", 10),
+        ("meal_type", "Lunch", 20),
+        ("meal_type", "Dinner", 30),
+        ("meal_type", "Snack", 40),
+        ("meal_type", "Dessert", 50),
+
+        ("macro_preset", "40/40/20 (Protein-Enhanced Lean)", 10),
+
+        ("prep", "5-Ingredient", 10),
+        ("prep", "Standard", 20),
+    ]
+
+    for cat, val, order in defaults:
+        db.add(PreferenceOption(category=cat, value=val, sort_order=order, is_active=True))
+    db.commit()
+
 # ============================================================
 # ROUTES
 # ============================================================
+@app.get("/admin", response_class=HTMLResponse)
+def admin(request: Request, token: str):
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    if not is_admin_token(token):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    with SessionLocal() as db:
+        seed_default_options_if_empty(db)
+
+        rows = (
+            db.query(PreferenceOption)
+            .order_by(
+                PreferenceOption.category.asc(),
+                PreferenceOption.sort_order.asc(),
+                PreferenceOption.value.asc(),
+            )
+            .all()
+        )
+
+        grouped = {"eating_style": [], "meal_type": [], "macro_preset": [], "prep": []}
+        for r in rows:
+            if r.category in grouped:
+                grouped[r.category].append(
+                    {
+                        "id": r.id,
+                        "value": r.value,
+                        "sort_order": r.sort_order,
+                        "is_active": bool(r.is_active),
+                    }
+                )
+
+    return templates.TemplateResponse(
+        "admin.html",
+        {
+            "request": request,
+            "token": token,
+            "grouped": grouped,
+        },
+    )
+
+
+@app.post("/admin/option/add")
+def admin_option_add(
+    token: str = Form(...),
+    category: str = Form(...),
+    value: str = Form(...),
+    sort_order: int = Form(0),
+):
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not is_admin_token(token):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    category = (category or "").strip()
+    value = (value or "").strip()
+    if category not in ("eating_style", "meal_type", "macro_preset", "prep"):
+        raise HTTPException(status_code=400, detail="Invalid category")
+    if not value:
+        raise HTTPException(status_code=400, detail="Value cannot be empty")
+
+    with SessionLocal() as db:
+        # prevent duplicate active values (case-insensitive)
+        existing = (
+            db.query(PreferenceOption)
+            .filter(PreferenceOption.category == category)
+            .filter(PreferenceOption.value.ilike(value))
+            .first()
+        )
+        if existing:
+            existing.value = value
+            existing.sort_order = int(sort_order or 0)
+            existing.is_active = True
+        else:
+            db.add(
+                PreferenceOption(
+                    category=category,
+                    value=value,
+                    sort_order=int(sort_order or 0),
+                    is_active=True,
+                )
+            )
+        db.commit()
+
+    return RedirectResponse(url=f"/admin?token={token}", status_code=302)
+
+
+@app.post("/admin/option/update")
+def admin_option_update(
+    token: str = Form(...),
+    option_id: int = Form(...),
+    value: str = Form(...),
+    sort_order: int = Form(0),
+):
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not is_admin_token(token):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    value = (value or "").strip()
+    if not value:
+        raise HTTPException(status_code=400, detail="Value cannot be empty")
+
+    with SessionLocal() as db:
+        row = db.query(PreferenceOption).filter(PreferenceOption.id == int(option_id)).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Option not found")
+
+        row.value = value
+        row.sort_order = int(sort_order or 0)
+        db.commit()
+
+    return RedirectResponse(url=f"/admin?token={token}", status_code=302)
+
+
+@app.post("/admin/option/toggle")
+def admin_option_toggle(
+    token: str = Form(...),
+    option_id: int = Form(...),
+):
+    user_id = get_user_id_from_token(token)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    if not is_admin_token(token):
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    with SessionLocal() as db:
+        row = db.query(PreferenceOption).filter(PreferenceOption.id == int(option_id)).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Option not found")
+
+        row.is_active = not bool(row.is_active)
+        db.commit()
+
+    return RedirectResponse(url=f"/admin?token={token}", status_code=302)
 
 @app.get("/landing", response_class=HTMLResponse)
 def landing(request: Request, token: str):
@@ -354,7 +533,7 @@ def landing(request: Request, token: str):
         raise HTTPException(status_code=401, detail="Invalid token (missing sub)")
 
     ident = token_identity_from_jwt(token)
-
+    is_admin = is_admin_token(token)
     with SessionLocal() as db:
         opts = load_options(db)
 
@@ -395,6 +574,7 @@ def landing(request: Request, token: str):
             "meal_type_options": opts["meal_type"],
             "macro_preset_options": opts["macro_preset"],
             "prep_options": opts["prep"],
+            "is_admin": is_admin,
         },
     )
 
