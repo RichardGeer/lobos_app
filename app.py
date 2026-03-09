@@ -35,9 +35,18 @@ OLLAMA_BASE_URL = os.getenv("LOBOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434").r
 FAST_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_FAST", "mistral:latest")
 QUALITY_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_QUALITY", "llama3.1:8b-instruct-q8_0")
 
-# New env var name (requested) + backward compatible fallback
 RECIPE_MAX_CACHE_AGE_DAYS = int(
     os.getenv("LOBOS_RECIPE_MAX_CACHE_AGE_DAYS", os.getenv("RECIPE_MAX_CACHE_AGE_IN_DAYS", "7"))
+)
+
+# Membership gate
+LOBOS_REQUIRED_MEMBERSHIP_ID = int(os.getenv("LOBOS_REQUIRED_MEMBERSHIP_ID", "27"))
+LOBOS_REQUIRED_MEMBERSHIP_TITLE = os.getenv(
+    "LOBOS_REQUIRED_MEMBERSHIP_TITLE",
+    "GLP-1 Action Plan Hub"
+).strip()
+LOBOS_REQUIRE_MEMBERSHIP = os.getenv("LOBOS_REQUIRE_MEMBERSHIP", "1").strip().lower() in (
+    "1", "true", "yes", "on"
 )
 
 engine = create_engine(DATABASE_URL)
@@ -69,7 +78,6 @@ class UserProfile(Base):
     last_name = Column(String(128), nullable=True)
     roles = Column(Text, nullable=True)
 
-    # NEW: membership info from WP JWT (JSON string)
     membership = Column(Text, nullable=True)
 
 
@@ -87,7 +95,6 @@ class RecipeResult(Base):
     model = Column(String(128), nullable=True)
     prompt_hash = Column(String(64), nullable=True)
 
-    # columns you added in DB
     title = Column(String(256), nullable=True)
     preview = Column(Text, nullable=True)
 
@@ -96,7 +103,7 @@ class PreferenceOption(Base):
     __tablename__ = "preference_options"
 
     id = Column(Integer, primary_key=True)
-    category = Column(String(64), nullable=False)  # eating_style | meal_type | macro_preset | prep
+    category = Column(String(64), nullable=False)
     value = Column(String(256), nullable=False)
     sort_order = Column(Integer, nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
@@ -113,33 +120,30 @@ def now_ts() -> int:
 
 
 def clean_title(t: str) -> str:
-    """
-    Normalize common title formats:
-      - "# Title" -> "Title"
-      - "**Title**" -> "Title"
-      - trims whitespace
-    """
     if not t:
         return ""
     t = t.strip()
 
-    # remove leading markdown header hashes
     if t.startswith("#"):
         t = t.lstrip("#").strip()
 
-    # remove surrounding bold markers
     if t.startswith("**") and t.endswith("**") and len(t) >= 4:
         t = t[2:-2].strip()
 
-    # collapse whitespace
     t = re.sub(r"\s+", " ", t).strip()
     return t
 
 
-def get_user_id_from_token(token: str) -> Optional[str]:
-    """Decode without verifying signature; we only need stable 'sub'."""
+def get_raw_payload_from_token(token: str) -> Dict[str, Any]:
     try:
-        payload = jwt.decode(token, options={"verify_signature": False})
+        return jwt.decode(token, options={"verify_signature": False})
+    except Exception:
+        return {}
+
+
+def get_user_id_from_token(token: str) -> Optional[str]:
+    try:
+        payload = get_raw_payload_from_token(token)
         sub = payload.get("sub", None)
         return str(sub) if sub is not None else None
     except Exception:
@@ -148,20 +152,30 @@ def get_user_id_from_token(token: str) -> Optional[str]:
 
 def token_identity_from_jwt(token: str) -> Dict[str, Any]:
     """
-    NOTE: This is currently decode-without-verify (dev mode).
-    It returns a stable subset used by the app + membership.
+    NOTE: decode-without-verify (dev mode).
+    Reads from payload.identity first, then falls back to top-level for compatibility.
     """
     try:
-        payload = jwt.decode(token, options={"verify_signature": False})
+        payload = get_raw_payload_from_token(token)
+        identity = payload.get("identity")
+        if not isinstance(identity, dict):
+            identity = {}
+
         return {
-            "email": payload.get("email"),
-            "first_name": payload.get("first_name"),
-            "last_name": payload.get("last_name"),
-            "roles": payload.get("roles") or [],
-            "membership": payload.get("membership"),
+            "email": identity.get("email", payload.get("email")),
+            "first_name": identity.get("first_name", payload.get("first_name")),
+            "last_name": identity.get("last_name", payload.get("last_name")),
+            "roles": identity.get("roles", payload.get("roles")) or [],
+            "membership": identity.get("membership", payload.get("membership")),
         }
     except Exception:
-        return {"email": None, "first_name": None, "last_name": None, "roles": [], "membership": None}
+        return {
+            "email": None,
+            "first_name": None,
+            "last_name": None,
+            "roles": [],
+            "membership": None,
+        }
 
 
 def roles_to_human(roles: Any) -> str:
@@ -177,6 +191,56 @@ def roles_to_human(roles: Any) -> str:
         except Exception:
             pass
     return str(roles)
+
+
+def membership_to_dict(membership: Any) -> Dict[str, Any]:
+    if membership is None:
+        return {}
+
+    if isinstance(membership, dict):
+        return membership
+
+    if isinstance(membership, str):
+        try:
+            parsed = json.loads(membership)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    return {}
+
+
+def has_required_membership(membership: Any) -> bool:
+    membership_obj = membership_to_dict(membership)
+    memberpress = membership_obj.get("memberpress", {})
+
+    memberships = memberpress.get("memberships", [])
+    if not isinstance(memberships, list):
+        memberships = []
+
+    for item in memberships:
+        if not isinstance(item, dict):
+            continue
+
+        item_id = item.get("id")
+        item_title = str(item.get("title", "")).strip()
+        item_status = str(item.get("status", "")).strip().lower()
+
+        id_match = (
+            LOBOS_REQUIRED_MEMBERSHIP_ID > 0 and
+            item_id == LOBOS_REQUIRED_MEMBERSHIP_ID
+        )
+
+        title_match = (
+            bool(LOBOS_REQUIRED_MEMBERSHIP_TITLE) and
+            item_title == LOBOS_REQUIRED_MEMBERSHIP_TITLE
+        )
+
+        if (id_match or title_match) and item_status == "complete":
+            return True
+
+    return False
 
 
 def load_options(db) -> Dict[str, List[str]]:
@@ -198,7 +262,6 @@ def load_options(db) -> Dict[str, List[str]]:
         if r.category in opts:
             opts[r.category].append(r.value)
 
-    # fallback so UI doesn't break
     if not opts["eating_style"]:
         opts["eating_style"] = ["No Preference"]
     if not opts["meal_type"]:
@@ -275,17 +338,14 @@ def hash_request(payload: Dict[str, Any]) -> str:
 def extract_title_and_preview(text: str) -> Tuple[str, str]:
     t = (text or "").strip()
 
-    # Prefer first markdown H1: "# Title"
     m = re.search(r"^\s*#\s+(.+)\s*$", t, flags=re.MULTILINE)
     if m:
         raw_title = m.group(1).strip()
     else:
-        # Fallback: "Title: something"
         m2 = re.search(r"^\s*Title:\s*(.+)\s*$", t, flags=re.MULTILINE | re.IGNORECASE)
         raw_title = m2.group(1).strip() if m2 else ""
 
     if not raw_title:
-        # last fallback: first non-empty line, clipped
         for line in t.splitlines():
             line = line.strip()
             if line:
@@ -294,7 +354,6 @@ def extract_title_and_preview(text: str) -> Tuple[str, str]:
 
     title = clean_title(raw_title)
 
-    # keep title short for UI cards
     if len(title) > 72:
         title = title[:69].rstrip() + "..."
 
@@ -383,7 +442,6 @@ def is_admin_token(token: str) -> bool:
 
 
 def seed_default_options_if_empty(db) -> None:
-    # Only seed once if table is empty
     if db.query(PreferenceOption).count() > 0:
         return
 
@@ -561,11 +619,50 @@ def landing(request: Request, token: str):
     ident = token_identity_from_jwt(token)
     is_admin = is_admin_token(token)
 
-    # Debug: do we even see membership in the JWT payload?
-    logger.info("landing: user_id=%s roles=%s membership_present=%s",
-                user_id,
-                ident.get("roles"),
-                "membership" in ident and ident.get("membership") is not None)
+    logger.info(
+        "landing: user_id=%s roles=%s membership_present=%s require_membership=%s",
+        user_id,
+        ident.get("roles"),
+        ident.get("membership") is not None,
+        LOBOS_REQUIRE_MEMBERSHIP,
+    )
+
+    if LOBOS_REQUIRE_MEMBERSHIP and not has_required_membership(ident.get("membership")):
+        logger.warning(
+            "landing denied: user_id=%s missing required membership id=%s title=%s",
+            user_id,
+            LOBOS_REQUIRED_MEMBERSHIP_ID,
+            LOBOS_REQUIRED_MEMBERSHIP_TITLE,
+        )
+        return templates.TemplateResponse(
+            "landing.html",
+            {
+                "request": request,
+                "token": token,
+                "profile": {
+                    "user_id": user_id,
+                    "created_at": None,
+                    "updated_at": None,
+                    "eating_style": "",
+                    "meal_type": "",
+                    "macro_preset": "",
+                    "prep": "",
+                    "email": ident.get("email"),
+                    "first_name": ident.get("first_name"),
+                    "last_name": ident.get("last_name"),
+                    "roles": json.dumps(ident.get("roles") or []),
+                    "membership": ident.get("membership"),
+                },
+                "roles_human": roles_to_human(ident.get("roles")),
+                "eating_style_options": [],
+                "meal_type_options": [],
+                "macro_preset_options": [],
+                "prep_options": [],
+                "is_admin": is_admin,
+                "membership_required_error": "Active membership required to access Lobos.",
+            },
+            status_code=403,
+        )
 
     with SessionLocal() as db:
         opts = load_options(db)
@@ -584,7 +681,6 @@ def landing(request: Request, token: str):
             db.add(profile)
             db.commit()
 
-        # sync identity for display
         profile.email = ident.get("email")
         profile.first_name = ident.get("first_name")
         profile.last_name = ident.get("last_name")
@@ -592,7 +688,6 @@ def landing(request: Request, token: str):
         if ident.get("roles") is not None:
             profile.roles = json.dumps(ident.get("roles"))
 
-        # sync membership for display/debug (store as JSON string)
         if "membership" in ident:
             try:
                 profile.membership = json.dumps(ident.get("membership"))
@@ -617,6 +712,7 @@ def landing(request: Request, token: str):
             "macro_preset_options": opts["macro_preset"],
             "prep_options": opts["prep"],
             "is_admin": is_admin,
+            "membership_required_error": "",
         },
     )
 

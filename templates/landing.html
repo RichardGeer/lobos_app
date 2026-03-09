@@ -18,6 +18,16 @@
     .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f2f2f2; font-size: 12px; margin-left: 6px; }
     .kv { display:grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 14px; }
     .kv .k { color:#666; }
+    .alert-error {
+      margin: 0 0 14px 0;
+      padding: 12px 14px;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      background: #fef2f2;
+      color: #991b1b;
+      font-size: 14px;
+      font-weight: 600;
+    }
   </style>
 </head>
 <body>
@@ -26,6 +36,10 @@
   <div class="grid">
     <!-- LEFT -->
     <div class="card">
+      {% if membership_required_error %}
+        <div class="alert-error">{{ membership_required_error }}</div>
+      {% endif %}
+
       <h2>Identity</h2>
 
       <div class="kv">
@@ -35,59 +49,67 @@
         <div class="k">Roles</div><div>{{ (roles_human or "") }}</div>
       </div>
 
-      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+      {% if not membership_required_error %}
+        <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
 
-      <h2>Preferences <span class="pill">v1</span></h2>
+        <h2>Preferences <span class="pill">v1</span></h2>
 
-      <form method="post" action="/prefs/save">
-        <input type="hidden" name="token" value="{{ token }}" />
+        <form method="post" action="/prefs/save">
+          <input type="hidden" name="token" value="{{ token }}" />
 
-        <label>Eating style</label>
-        <select name="eating_style">
-          {% for v in eating_style_options %}
-            <option value="{{ v }}" {% if profile.eating_style == v %}selected{% endif %}>{{ v }}</option>
-          {% endfor %}
-        </select>
+          <label>Eating style</label>
+          <select name="eating_style">
+            {% for v in eating_style_options %}
+              <option value="{{ v }}" {% if profile.eating_style == v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
 
-        <label>Meal type</label>
-        <select name="meal_type">
-          {% for v in meal_type_options %}
-            <option value="{{ v }}" {% if profile.meal_type == v %}selected{% endif %}>{{ v }}</option>
-          {% endfor %}
-        </select>
+          <label>Meal type</label>
+          <select name="meal_type">
+            {% for v in meal_type_options %}
+              <option value="{{ v }}" {% if profile.meal_type == v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
 
-        <label>Macro preset</label>
-        <select name="macro_preset">
-          {% for v in macro_preset_options %}
-            <option value="{{ v }}" {% if profile.macro_preset == v %}selected{% endif %}>{{ v }}</option>
-          {% endfor %}
-        </select>
+          <label>Macro preset</label>
+          <select name="macro_preset">
+            {% for v in macro_preset_options %}
+              <option value="{{ v }}" {% if profile.macro_preset == v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
 
-        <label>Preparation</label>
-        <select name="prep">
-          {% for v in prep_options %}
-            <option value="{{ v }}" {% if profile.prep == v %}selected{% endif %}>{{ v }}</option>
-          {% endfor %}
-        </select>
+          <label>Preparation</label>
+          <select name="prep">
+            {% for v in prep_options %}
+              <option value="{{ v }}" {% if profile.prep == v %}selected{% endif %}>{{ v }}</option>
+            {% endfor %}
+          </select>
 
-        <div style="margin-top: 12px;">
-          <button class="btn btn-save" type="submit">Save Preferences</button>
+          <div style="margin-top: 12px;">
+            <button class="btn btn-save" type="submit">Save Preferences</button>
+          </div>
+
+          <div class="muted" style="margin-top: 8px;">
+            Saved to Postgres. (Later: sync back to WP.)
+          </div>
+        </form>
+
+        <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <a class="btn btn-primary" href="/my-recipe?token={{ token }}">My Recipe</a>
+          {% if is_admin %}
+          <a class="btn" href="/admin?token={{ token }}">Admin</a>
+          {% endif %}
+          <a class="btn" href="/me?token={{ token }}">/me debug</a>
         </div>
+      {% else %}
+        <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
 
-        <div class="muted" style="margin-top: 8px;">
-          Saved to Postgres. (Later: sync back to WP.)
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <a class="btn" href="/me?token={{ token }}">/me debug</a>
         </div>
-      </form>
-
-      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
-
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <a class="btn btn-primary" href="/my-recipe?token={{ token }}">My Recipe</a>
-        {% if is_admin %}
-        <a class="btn" href="/admin?token={{ token }}">Admin</a>
-        {% endif %}
-        <a class="btn" href="/me?token={{ token }}">/me debug</a>
-      </div>
+      {% endif %}
     </div>
 
     <!-- RIGHT (intentionally blank now) -->
