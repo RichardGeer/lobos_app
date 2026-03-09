@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Lobos Dev
- * Description: Lobos DEV SSO plugin with button shortcode, debug shortcode, JWT redirect, membership check, and admin settings.
- * Version: 0.7
+ * Plugin Name: Lobos Dev SSO
+ * Description: Lobos DEV SSO plugin with button shortcode, debug shortcode, JWT redirect, MemberPress membership detection, and admin settings.
+ * Version: 0.6
  * Author: Paul
  */
 
@@ -11,550 +11,480 @@ if (!defined('ABSPATH'))
     exit;
 }
 
-class GLP_Lobos_Dev_Plugin
+if (!class_exists('Lobos_Dev_SSO_Plugin'))
 {
-    const DEFAULT_URL = 'http://my.glp.com:8000/landing';
-    const DEFAULT_SECRET = '5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT';
-    const DEFAULT_ISSUER = 'wp-sim';
-    const DEFAULT_BUTTON_TEXT = 'Open Lobos Dev';
-    const DEFAULT_REQUIRE_MEMBERSHIP = '0';
-
-    const OPTION_TARGET_URL = 'glp_lobos_dev_target_url';
-    const OPTION_SECRET = 'glp_lobos_dev_secret';
-    const OPTION_ISSUER = 'glp_lobos_dev_issuer';
-    const OPTION_BUTTON_TEXT = 'glp_lobos_dev_button_text';
-    const OPTION_REQUIRE_MEMBERSHIP = 'glp_lobos_dev_require_membership';
-
-    const SETTINGS_GROUP = 'glp_lobos_dev_settings_group';
-    const ADMIN_SLUG = 'glp-lobos-dev-settings';
-
-    const SHORTCODE_BUTTON = 'lobos_dev_button';
-    const SHORTCODE_DEBUG = 'lobos_dev_debug';
-
-    const ACTION_LAUNCH = 'glp_lobos_dev_launch';
-
-    public function init()
+    class Lobos_Dev_SSO_Plugin
     {
-        add_shortcode(self::SHORTCODE_BUTTON, array($this, 'button_shortcode'));
-        add_shortcode(self::SHORTCODE_DEBUG, array($this, 'debug_shortcode'));
+        const OPTION_KEY = 'lobos_dev_sso_options';
 
-        add_action('admin_post_' . self::ACTION_LAUNCH, array($this, 'handle_launch'));
-        add_action('admin_post_nopriv_' . self::ACTION_LAUNCH, array($this, 'handle_launch'));
+        const DEFAULT_URL = 'http://my.glp.com:8000/landing';
+        const DEFAULT_SECRET = '5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT';
+        const DEFAULT_ISSUER = 'wp-sim';
+        const DEFAULT_REQUIRE_MEMBERSHIP = 0;
 
-        add_action('admin_init', array($this, 'register_settings'));
-        add_action('admin_menu', array($this, 'add_admin_menu'));
-        add_action('wp_head', array($this, 'button_styles'));
-    }
-
-    public function get_option($key, $default = '')
-    {
-        $value = get_option($key, null);
-
-        if ($value === null || $value === '')
+        public function __construct()
         {
-            return $default;
+            add_action('admin_menu', array($this, 'admin_menu'));
+            add_action('admin_init', array($this, 'admin_init'));
+
+            add_shortcode('lobos_dev_button', array($this, 'shortcode_button'));
+            add_shortcode('lobos_dev_sso_button', array($this, 'shortcode_button'));
+            add_shortcode('lobos_dev_debug', array($this, 'shortcode_debug'));
+
+            add_action('init', array($this, 'maybe_handle_actions'));
         }
 
-        return $value;
-    }
-
-    public function get_target_url()
-    {
-        return $this->get_option(self::OPTION_TARGET_URL, self::DEFAULT_URL);
-    }
-
-    public function get_secret()
-    {
-        return $this->get_option(self::OPTION_SECRET, self::DEFAULT_SECRET);
-    }
-
-    public function get_issuer()
-    {
-        return $this->get_option(self::OPTION_ISSUER, self::DEFAULT_ISSUER);
-    }
-
-    public function get_button_text()
-    {
-        return $this->get_option(self::OPTION_BUTTON_TEXT, self::DEFAULT_BUTTON_TEXT);
-    }
-
-    public function get_require_membership()
-    {
-        return $this->get_option(self::OPTION_REQUIRE_MEMBERSHIP, self::DEFAULT_REQUIRE_MEMBERSHIP);
-    }
-
-    public function b64url_encode($data)
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-    }
-
-    public function jwt_hs256($payload, $secret)
-    {
-        $header = array(
-            'alg' => 'HS256',
-            'typ' => 'JWT',
-        );
-
-        $headerEncoded = $this->b64url_encode(wp_json_encode($header));
-        $payloadEncoded = $this->b64url_encode(wp_json_encode($payload));
-
-        $signingInput = $headerEncoded . '.' . $payloadEncoded;
-        $signature = hash_hmac('sha256', $signingInput, $secret, true);
-        $signatureEncoded = $this->b64url_encode($signature);
-
-        return $headerEncoded . '.' . $payloadEncoded . '.' . $signatureEncoded;
-    }
-
-    public function memberpress_table_exists()
-    {
-        global $wpdb;
-
-        $table = $wpdb->prefix . 'mepr_transactions';
-
-        $tableExists = $wpdb->get_var(
-            $wpdb->prepare(
-                "SHOW TABLES LIKE %s",
-                $table
-            )
-        );
-
-        return ($tableExists === $table);
-    }
-
-    public function get_memberpress_membership_info($user_id)
-    {
-        $info = array(
-            'user_id' => intval($user_id),
-            'exists'  => false,
-            'count'   => 0,
-        );
-
-        if (!$user_id)
+        public function admin_menu()
         {
-            return $info;
+            add_options_page(
+                'Lobos Dev SSO',
+                'Lobos Dev SSO',
+                'manage_options',
+                'lobos-dev-sso',
+                array($this, 'settings_page')
+            );
         }
 
-        if (!$this->memberpress_table_exists())
+        public function admin_init()
         {
-            return $info;
+            register_setting(
+                'lobos_dev_sso_group',
+                self::OPTION_KEY,
+                array($this, 'sanitize_options')
+            );
         }
 
-        global $wpdb;
-        $table = $wpdb->prefix . 'mepr_transactions';
-
-        $count = $wpdb->get_var(
-            $wpdb->prepare(
-                "SELECT COUNT(*) FROM {$table} WHERE user_id = %d",
-                $user_id
-            )
-        );
-
-        $info['count'] = intval($count);
-        $info['exists'] = (intval($count) > 0);
-
-        return $info;
-    }
-
-    public function get_identity_payload($user)
-    {
-        $roles = array();
-
-        if (!empty($user->roles) && is_array($user->roles))
+        public function sanitize_options($input)
         {
-            $roles = array_values($user->roles);
+            $existing = $this->get_options();
+
+            $output = array();
+            $output['target_url'] = isset($input['target_url']) ? esc_url_raw(trim($input['target_url'])) : $existing['target_url'];
+            $output['secret'] = isset($input['secret']) ? trim($input['secret']) : $existing['secret'];
+            $output['issuer'] = isset($input['issuer']) ? sanitize_text_field(trim($input['issuer'])) : $existing['issuer'];
+            $output['require_membership'] = !empty($input['require_membership']) ? 1 : 0;
+
+            return $output;
         }
 
-        return array(
-            'email'      => (string) $user->user_email,
-            'first_name' => (string) get_user_meta($user->ID, 'first_name', true),
-            'last_name'  => (string) get_user_meta($user->ID, 'last_name', true),
-            'roles'      => $roles,
-            'membership' => array(
-                'memberpress' => $this->get_memberpress_membership_info($user->ID),
-            ),
-        );
-    }
-
-    public function build_payload_for_user($user)
-    {
-        $issuer = $this->get_issuer();
-        $now = time();
-
-        return array(
-            'iss'      => $issuer,
-            'sub'      => (string) $user->ID,
-            'iat'      => $now,
-            'nbf'      => $now,
-            'exp'      => $now + 3600,
-            'user_id'  => (string) $user->ID,
-            'identity' => $this->get_identity_payload($user),
-        );
-    }
-
-    public function build_jwt_for_user($user)
-    {
-        $secret = $this->get_secret();
-        $payload = $this->build_payload_for_user($user);
-
-        return $this->jwt_hs256($payload, $secret);
-    }
-
-    public function build_redirect_url($token)
-    {
-        return add_query_arg(
-            array(
-                'token' => $token,
-            ),
-            $this->get_target_url()
-        );
-    }
-
-    public function button_shortcode()
-    {
-        if (!is_user_logged_in())
+        public function get_options()
         {
-            $login_url = wp_login_url(get_permalink());
+            $defaults = array(
+                'target_url' => self::DEFAULT_URL,
+                'secret' => self::DEFAULT_SECRET,
+                'issuer' => self::DEFAULT_ISSUER,
+                'require_membership' => self::DEFAULT_REQUIRE_MEMBERSHIP,
+            );
 
-            return '<div class="glp-lobos-dev-message"><a class="glp-lobos-dev-button" href="' . esc_url($login_url) . '">Log in to access Lobos Dev</a></div>';
+            $saved = get_option(self::OPTION_KEY, array());
+
+            if (!is_array($saved))
+            {
+                $saved = array();
+            }
+
+            return wp_parse_args($saved, $defaults);
         }
 
-        $buttonText = $this->get_button_text();
-        $actionUrl = esc_url(admin_url('admin-post.php'));
-
-        $html  = '<div class="glp-lobos-dev-button-wrap">';
-        $html .= '<form method="post" action="' . $actionUrl . '">';
-        $html .= '<input type="hidden" name="action" value="' . esc_attr(self::ACTION_LAUNCH) . '">';
-        $html .= wp_nonce_field('glp_lobos_dev_launch_action', 'glp_lobos_dev_nonce', true, false);
-        $html .= '<button type="submit" class="glp-lobos-dev-button">' . esc_html($buttonText) . '</button>';
-        $html .= '</form>';
-        $html .= '</div>';
-
-        return $html;
-    }
-
-    public function debug_shortcode()
-    {
-        if (!current_user_can('manage_options'))
+        public function settings_page()
         {
-            return '<div class="glp-lobos-dev-debug-box"><strong>Lobos Dev Debug:</strong> admin access required.</div>';
-        }
+            if (!current_user_can('manage_options'))
+            {
+                return;
+            }
 
-        if (!is_user_logged_in())
-        {
-            return '<div class="glp-lobos-dev-debug-box"><strong>Lobos Dev Debug:</strong> you are not logged in.</div>';
-        }
+            $options = $this->get_options();
+            ?>
+            <div class="wrap">
+                <h1>Lobos Dev SSO Settings</h1>
 
-        $user = wp_get_current_user();
+                <form method="post" action="options.php">
+                    <?php settings_fields('lobos_dev_sso_group'); ?>
 
-        if (!$user || empty($user->ID))
-        {
-            return '<div class="glp-lobos-dev-debug-box"><strong>Lobos Dev Debug:</strong> unable to identify current user.</div>';
-        }
-
-        $secret = $this->get_secret();
-        $payload = $this->build_payload_for_user($user);
-        $token = '';
-        $redirect_url = '';
-        $secret_ready = !empty($secret);
-
-        if ($secret_ready)
-        {
-            $token = $this->build_jwt_for_user($user);
-            $redirect_url = $this->build_redirect_url($token);
-        }
-
-        $membership_exists = !empty($payload['identity']['membership']['memberpress']['exists']);
-        $membership_count = 0;
-
-        if (!empty($payload['identity']['membership']['memberpress']['count']))
-        {
-            $membership_count = intval($payload['identity']['membership']['memberpress']['count']);
-        }
-
-        $html  = '<div class="glp-lobos-dev-debug-box">';
-        $html .= '<h3>Lobos Dev Debug</h3>';
-
-        $html .= '<p><strong>User ID:</strong> ' . esc_html($user->ID) . '</p>';
-        $html .= '<p><strong>Email:</strong> ' . esc_html($user->user_email) . '</p>';
-        $html .= '<p><strong>First Name:</strong> ' . esc_html(get_user_meta($user->ID, 'first_name', true)) . '</p>';
-        $html .= '<p><strong>Last Name:</strong> ' . esc_html(get_user_meta($user->ID, 'last_name', true)) . '</p>';
-        $html .= '<p><strong>Roles:</strong> ' . esc_html(implode(', ', $user->roles)) . '</p>';
-        $html .= '<p><strong>Target URL:</strong> ' . esc_html($this->get_target_url()) . '</p>';
-        $html .= '<p><strong>Issuer:</strong> ' . esc_html($this->get_issuer()) . '</p>';
-        $html .= '<p><strong>MemberPress Table Exists:</strong> ' . ($this->memberpress_table_exists() ? 'true' : 'false') . '</p>';
-        $html .= '<p><strong>MemberPress Membership Exists:</strong> ' . ($membership_exists ? 'true' : 'false') . '</p>';
-        $html .= '<p><strong>MemberPress Transaction Count:</strong> ' . esc_html($membership_count) . '</p>';
-        $html .= '<p><strong>Require Membership Setting:</strong> ' . esc_html($this->get_require_membership()) . '</p>';
-
-        if (!$membership_exists)
-        {
-            $html .= '<div class="glp-lobos-dev-debug-warning">Warning: no MemberPress membership transaction found for this user.</div>';
-        }
-
-        if (!$secret_ready)
-        {
-            $html .= '<div class="glp-lobos-dev-debug-warning">Warning: JWT secret is not configured yet.</div>';
-        }
-
-        $html .= '<h4>JWT Payload</h4>';
-        $html .= '<pre>' . esc_html(wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)) . '</pre>';
-
-        $html .= '<h4>JWT Token</h4>';
-        if ($secret_ready)
-        {
-            $html .= '<pre>' . esc_html($token) . '</pre>';
-        }
-        else
-        {
-            $html .= '<pre>Secret not configured yet.</pre>';
-        }
-
-        $html .= '<h4>Redirect URL Preview</h4>';
-        if ($secret_ready)
-        {
-            $html .= '<pre>' . esc_html($redirect_url) . '</pre>';
-        }
-        else
-        {
-            $html .= '<pre>Secret not configured yet.</pre>';
-        }
-
-        $html .= '</div>';
-
-        return $html;
-    }
-
-    public function handle_launch()
-    {
-        if (!is_user_logged_in())
-        {
-            wp_die('You must be logged in to access Lobos Dev.');
-        }
-
-        if (!isset($_POST['glp_lobos_dev_nonce']) || !wp_verify_nonce($_POST['glp_lobos_dev_nonce'], 'glp_lobos_dev_launch_action'))
-        {
-            wp_die('Invalid request.');
-        }
-
-        $user = wp_get_current_user();
-
-        if (!$user || empty($user->ID))
-        {
-            wp_die('Unable to identify current user.');
-        }
-
-        $require_membership = $this->get_require_membership();
-        $identity = $this->get_identity_payload($user);
-        $has_memberpress_membership = !empty($identity['membership']['memberpress']['exists']);
-        $secret = $this->get_secret();
-
-        if ($require_membership === '1' && !$has_memberpress_membership)
-        {
-            wp_die('Active membership required to access Lobos Dev.');
-        }
-
-        if (empty($secret))
-        {
-            wp_die('Lobos Dev plugin secret is not configured yet.');
-        }
-
-        $token = $this->build_jwt_for_user($user);
-        $redirect_url = $this->build_redirect_url($token);
-
-        wp_redirect($redirect_url);
-        exit;
-    }
-
-    public function register_settings()
-    {
-        register_setting(self::SETTINGS_GROUP, self::OPTION_TARGET_URL);
-        register_setting(self::SETTINGS_GROUP, self::OPTION_SECRET);
-        register_setting(self::SETTINGS_GROUP, self::OPTION_ISSUER);
-        register_setting(self::SETTINGS_GROUP, self::OPTION_BUTTON_TEXT);
-        register_setting(self::SETTINGS_GROUP, self::OPTION_REQUIRE_MEMBERSHIP);
-    }
-
-    public function add_admin_menu()
-    {
-        add_options_page(
-            'Lobos Dev Settings',
-            'Lobos Dev',
-            'manage_options',
-            self::ADMIN_SLUG,
-            array($this, 'settings_page')
-        );
-    }
-
-    public function settings_page()
-    {
-        if (!current_user_can('manage_options'))
-        {
-            return;
-        }
-
-        ?>
-        <div class="wrap">
-            <h1>Lobos Dev Settings</h1>
-
-            <form method="post" action="options.php">
-                <?php settings_fields(self::SETTINGS_GROUP); ?>
-
-                <table class="form-table">
-                    <tr>
-                        <th scope="row"><label for="glp_lobos_dev_target_url">Target URL</label></th>
-                        <td>
-                            <input
-                                type="text"
-                                id="glp_lobos_dev_target_url"
-                                name="<?php echo esc_attr(self::OPTION_TARGET_URL); ?>"
-                                value="<?php echo esc_attr($this->get_target_url()); ?>"
-                                class="regular-text"
-                            >
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th scope="row"><label for="glp_lobos_dev_secret">JWT Secret</label></th>
-                        <td>
-                            <input
-                                type="text"
-                                id="glp_lobos_dev_secret"
-                                name="<?php echo esc_attr(self::OPTION_SECRET); ?>"
-                                value="<?php echo esc_attr($this->get_secret()); ?>"
-                                class="regular-text"
-                            >
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th scope="row"><label for="glp_lobos_dev_issuer">JWT Issuer</label></th>
-                        <td>
-                            <input
-                                type="text"
-                                id="glp_lobos_dev_issuer"
-                                name="<?php echo esc_attr(self::OPTION_ISSUER); ?>"
-                                value="<?php echo esc_attr($this->get_issuer()); ?>"
-                                class="regular-text"
-                            >
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th scope="row"><label for="glp_lobos_dev_button_text">Button Text</label></th>
-                        <td>
-                            <input
-                                type="text"
-                                id="glp_lobos_dev_button_text"
-                                name="<?php echo esc_attr(self::OPTION_BUTTON_TEXT); ?>"
-                                value="<?php echo esc_attr($this->get_button_text()); ?>"
-                                class="regular-text"
-                            >
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <th scope="row">Require MemberPress Membership</th>
-                        <td>
-                            <label>
+                    <table class="form-table" role="presentation">
+                        <tr>
+                            <th scope="row"><label for="lobos_dev_target_url">Target URL</label></th>
+                            <td>
                                 <input
-                                    type="checkbox"
-                                    name="<?php echo esc_attr(self::OPTION_REQUIRE_MEMBERSHIP); ?>"
-                                    value="1"
-                                    <?php checked($this->get_require_membership(), '1'); ?>
-                                >
-                                Require active Lobos membership to launch
-                            </label>
-                        </td>
-                    </tr>
-                </table>
+                                    type="url"
+                                    id="lobos_dev_target_url"
+                                    name="<?php echo esc_attr(self::OPTION_KEY); ?>[target_url]"
+                                    value="<?php echo esc_attr($options['target_url']); ?>"
+                                    class="regular-text"
+                                />
+                            </td>
+                        </tr>
 
-                <?php submit_button(); ?>
+                        <tr>
+                            <th scope="row"><label for="lobos_dev_secret">JWT Secret</label></th>
+                            <td>
+                                <input
+                                    type="text"
+                                    id="lobos_dev_secret"
+                                    name="<?php echo esc_attr(self::OPTION_KEY); ?>[secret]"
+                                    value="<?php echo esc_attr($options['secret']); ?>"
+                                    class="regular-text"
+                                />
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th scope="row"><label for="lobos_dev_issuer">Issuer</label></th>
+                            <td>
+                                <input
+                                    type="text"
+                                    id="lobos_dev_issuer"
+                                    name="<?php echo esc_attr(self::OPTION_KEY); ?>[issuer]"
+                                    value="<?php echo esc_attr($options['issuer']); ?>"
+                                    class="regular-text"
+                                />
+                            </td>
+                        </tr>
+
+                        <tr>
+                            <th scope="row">Require Membership</th>
+                            <td>
+                                <label>
+                                    <input
+                                        type="checkbox"
+                                        name="<?php echo esc_attr(self::OPTION_KEY); ?>[require_membership]"
+                                        value="1"
+                                        <?php checked(!empty($options['require_membership'])); ?>
+                                    />
+                                    Require an active MemberPress membership before redirect
+                                </label>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <?php submit_button(); ?>
+                </form>
+            </div>
+            <?php
+        }
+
+        public function shortcode_button($atts = array())
+        {
+            if (!is_user_logged_in())
+            {
+                return '<p>You must be logged in to access Lobos Dev.</p>';
+            }
+
+            $action_url = add_query_arg(array('lobos_dev_action' => 'go'), home_url('/'));
+
+            ob_start();
+            ?>
+            <form method="post" action="<?php echo esc_url($action_url); ?>">
+                <?php wp_nonce_field('lobos_dev_go', 'lobos_dev_nonce'); ?>
+                <button type="submit">Open Lobos Dev</button>
             </form>
+            <?php
+            return ob_get_clean();
+        }
 
-            <hr>
+        public function shortcode_debug($atts = array())
+        {
+            if (!is_user_logged_in())
+            {
+                return '<p>You must be logged in to view Lobos Dev Debug.</p>';
+            }
 
-            <h2>Shortcodes</h2>
-            <p><code>[<?php echo esc_html(self::SHORTCODE_BUTTON); ?>]</code></p>
-            <p><code>[<?php echo esc_html(self::SHORTCODE_DEBUG); ?>]</code></p>
-        </div>
-        <?php
+            if (!current_user_can('manage_options'))
+            {
+                return '<p>Lobos Dev Debug is currently admin only.</p>';
+            }
+
+            $action_url = add_query_arg(array('lobos_dev_action' => 'debug'), home_url('/'));
+
+            ob_start();
+            ?>
+            <form method="post" action="<?php echo esc_url($action_url); ?>">
+                <?php wp_nonce_field('lobos_dev_debug', 'lobos_dev_nonce'); ?>
+                <button type="submit">Lobos Dev Debug</button>
+            </form>
+            <?php
+            return ob_get_clean();
+        }
+
+        public function maybe_handle_actions()
+        {
+            if (empty($_GET['lobos_dev_action']))
+            {
+                return;
+            }
+
+            $action = sanitize_text_field(wp_unslash($_GET['lobos_dev_action']));
+
+            if ($action !== 'go' && $action !== 'debug')
+            {
+                return;
+            }
+
+            if ($_SERVER['REQUEST_METHOD'] !== 'POST')
+            {
+                return;
+            }
+
+            if (!is_user_logged_in())
+            {
+                wp_die('You must be logged in.');
+            }
+
+            if (empty($_POST['lobos_dev_nonce']))
+            {
+                wp_die('Missing nonce.');
+            }
+
+            $nonce = sanitize_text_field(wp_unslash($_POST['lobos_dev_nonce']));
+
+            if ($action === 'go' && !wp_verify_nonce($nonce, 'lobos_dev_go'))
+            {
+                wp_die('Invalid nonce.');
+            }
+
+            if ($action === 'debug' && !wp_verify_nonce($nonce, 'lobos_dev_debug'))
+            {
+                wp_die('Invalid nonce.');
+            }
+
+            if ($action === 'debug')
+            {
+                if (!current_user_can('manage_options'))
+                {
+                    wp_die('Admin access required for debug.');
+                }
+
+                $this->render_debug_page();
+                exit;
+            }
+
+            $this->handle_redirect();
+            exit;
+        }
+
+        private function handle_redirect()
+        {
+            $options = $this->get_options();
+            $target_url = trim($options['target_url']);
+            $secret = trim($options['secret']);
+            $require_membership = !empty($options['require_membership']);
+
+            if (empty($target_url))
+            {
+                wp_die('Lobos Dev target URL is not configured.');
+            }
+
+            if (empty($secret) || $secret === 'REPLACE_ME')
+            {
+                wp_die('Lobos Dev plugin secret is not configured yet.');
+            }
+
+            $user = wp_get_current_user();
+            $membership_info = $this->get_memberpress_membership_info($user->ID);
+
+            if ($require_membership && empty($membership_info['exists']))
+            {
+                wp_die('Active membership required to access Lobos Dev.');
+            }
+
+            $payload = $this->build_jwt_payload($user, $membership_info, $options);
+            $jwt = $this->jwt_encode_hs256($payload, $secret);
+
+            $redirect_url = add_query_arg(array('token' => rawurlencode($jwt)), $target_url);
+            wp_redirect($redirect_url);
+            exit;
+        }
+
+        private function render_debug_page()
+        {
+            $options = $this->get_options();
+            $user = wp_get_current_user();
+            $membership_info = $this->get_memberpress_membership_info($user->ID);
+            $payload = $this->build_jwt_payload($user, $membership_info, $options);
+            $jwt = $this->jwt_encode_hs256($payload, $options['secret']);
+            $redirect_url = add_query_arg(array('token' => rawurlencode($jwt)), $options['target_url']);
+
+            nocache_headers();
+            ?>
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <meta charset="utf-8">
+                <title>Lobos Dev Debug</title>
+                <style>
+                    body { font-family: Arial, sans-serif; margin: 30px; line-height: 1.5; }
+                    pre { background: #f4f4f4; padding: 12px; overflow: auto; }
+                    h1, h2 { margin-top: 24px; }
+                    .warn { color: #b35b00; font-weight: bold; }
+                </style>
+            </head>
+            <body>
+                <h1>Lobos Dev Debug</h1>
+
+                <p><strong>User ID:</strong> <?php echo esc_html($user->ID); ?></p>
+                <p><strong>Email:</strong> <?php echo esc_html($user->user_email); ?></p>
+                <p><strong>First Name:</strong> <?php echo esc_html($user->first_name); ?></p>
+                <p><strong>Last Name:</strong> <?php echo esc_html($user->last_name); ?></p>
+                <p><strong>Roles:</strong> <?php echo esc_html(implode(', ', (array) $user->roles)); ?></p>
+
+                <p><strong>Target URL:</strong> <?php echo esc_html($options['target_url']); ?></p>
+                <p><strong>Issuer:</strong> <?php echo esc_html($options['issuer']); ?></p>
+
+                <p><strong>MemberPress Table Exists:</strong> <?php echo $membership_info['table_exists'] ? 'true' : 'false'; ?></p>
+                <p><strong>MemberPress Membership Exists:</strong> <?php echo $membership_info['exists'] ? 'true' : 'false'; ?></p>
+                <p><strong>MemberPress Transaction Count:</strong> <?php echo esc_html((string) $membership_info['count']); ?></p>
+                <p><strong>Require Membership Setting:</strong> <?php echo !empty($options['require_membership']) ? '1' : '0'; ?></p>
+
+                <?php if (!$membership_info['exists']) : ?>
+                    <p class="warn">Warning: no MemberPress membership transaction found for this user.</p>
+                <?php endif; ?>
+
+                <h2>MemberPress Memberships</h2>
+                <pre><?php echo esc_html(wp_json_encode($membership_info['memberships'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
+
+                <h2>JWT Payload</h2>
+                <pre><?php echo esc_html(wp_json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)); ?></pre>
+
+                <h2>JWT Token</h2>
+                <pre><?php echo esc_html($jwt); ?></pre>
+
+                <h2>Redirect URL Preview</h2>
+                <pre><?php echo esc_html($redirect_url); ?></pre>
+            </body>
+            </html>
+            <?php
+        }
+
+        private function build_jwt_payload($user, $membership_info, $options)
+        {
+            $now = time();
+
+            return array(
+                'iss' => (string) $options['issuer'],
+                'sub' => (string) $user->ID,
+                'iat' => $now,
+                'nbf' => $now,
+                'exp' => $now + 3600,
+                'user_id' => (string) $user->ID,
+                'identity' => array(
+                    'email' => (string) $user->user_email,
+                    'first_name' => (string) $user->first_name,
+                    'last_name' => (string) $user->last_name,
+                    'roles' => array_values((array) $user->roles),
+                    'membership' => array(
+                        'memberpress' => array(
+                            'user_id' => (int) $user->ID,
+                            'exists' => !empty($membership_info['exists']),
+                            'count' => (int) $membership_info['count'],
+                            'memberships' => array_values($membership_info['memberships']),
+                        ),
+                    ),
+                ),
+            );
+        }
+
+        private function get_memberpress_membership_info($user_id)
+        {
+            global $wpdb;
+
+            $result = array(
+                'table_exists' => false,
+                'exists' => false,
+                'count' => 0,
+                'memberships' => array(),
+            );
+
+            $transactions_table = $wpdb->prefix . 'mepr_transactions';
+            $posts_table = $wpdb->posts;
+
+            $table_found = $wpdb->get_var(
+                $wpdb->prepare('SHOW TABLES LIKE %s', $transactions_table)
+            );
+
+            if ($table_found !== $transactions_table)
+            {
+                return $result;
+            }
+
+            $result['table_exists'] = true;
+
+            $rows = $wpdb->get_results(
+                $wpdb->prepare(
+                    "
+                    SELECT
+                        t.id AS transaction_id,
+                        t.user_id,
+                        t.product_id AS membership_id,
+                        t.status,
+                        p.post_title AS membership_title
+                    FROM {$transactions_table} t
+                    LEFT JOIN {$posts_table} p
+                        ON p.ID = t.product_id
+                    WHERE t.user_id = %d
+                      AND t.status IN ('complete', 'confirmed')
+                    ORDER BY t.id DESC
+                    ",
+                    $user_id
+                ),
+                ARRAY_A
+            );
+
+            if (empty($rows))
+            {
+                return $result;
+            }
+
+            $memberships_by_id = array();
+
+            foreach ($rows as $row)
+            {
+                $membership_id = isset($row['membership_id']) ? (int) $row['membership_id'] : 0;
+
+                if ($membership_id <= 0)
+                {
+                    continue;
+                }
+
+                if (!isset($memberships_by_id[$membership_id]))
+                {
+                    $memberships_by_id[$membership_id] = array(
+                        'id' => $membership_id,
+                        'title' => isset($row['membership_title']) ? (string) $row['membership_title'] : '',
+                        'status' => isset($row['status']) ? (string) $row['status'] : '',
+                    );
+                }
+            }
+
+            $result['memberships'] = array_values($memberships_by_id);
+            $result['count'] = count($result['memberships']);
+            $result['exists'] = ($result['count'] > 0);
+
+            return $result;
+        }
+
+        private function base64url_encode($data)
+        {
+            return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+        }
+
+        private function jwt_encode_hs256($payload, $secret)
+        {
+            $header = array(
+                'alg' => 'HS256',
+                'typ' => 'JWT',
+            );
+
+            $segments = array();
+            $segments[] = $this->base64url_encode(wp_json_encode($header));
+            $segments[] = $this->base64url_encode(wp_json_encode($payload));
+
+            $signing_input = implode('.', $segments);
+            $signature = hash_hmac('sha256', $signing_input, $secret, true);
+            $segments[] = $this->base64url_encode($signature);
+
+            return implode('.', $segments);
+        }
     }
 
-    public function button_styles()
-    {
-        echo '
-        <style>
-            .glp-lobos-dev-button-wrap
-            {
-                margin: 20px 0;
-            }
-
-            .glp-lobos-dev-button
-            {
-                display: inline-block;
-                padding: 12px 20px;
-                background: #2271b1;
-                color: #ffffff !important;
-                text-decoration: none;
-                border: 0;
-                border-radius: 6px;
-                font-weight: 600;
-                cursor: pointer;
-            }
-
-            .glp-lobos-dev-button:hover
-            {
-                background: #135e96;
-                color: #ffffff !important;
-            }
-
-            .glp-lobos-dev-message
-            {
-                margin: 20px 0;
-            }
-
-            .glp-lobos-dev-debug-box
-            {
-                margin: 20px 0;
-                padding: 16px;
-                border: 1px solid #ccd0d4;
-                background: #ffffff;
-                border-radius: 6px;
-            }
-
-            .glp-lobos-dev-debug-box pre
-            {
-                white-space: pre-wrap;
-                word-break: break-word;
-                background: #f6f7f7;
-                padding: 12px;
-                border-radius: 4px;
-                overflow: auto;
-            }
-
-            .glp-lobos-dev-debug-warning
-            {
-                margin: 12px 0;
-                padding: 12px;
-                background: #fff8e5;
-                border-left: 4px solid #dba617;
-            }
-        </style>
-        ';
-    }
+    new Lobos_Dev_SSO_Plugin();
 }
-
-function glp_lobos_dev_boot_plugin()
-{
-    static $instance = null;
-
-    if ($instance === null)
-    {
-        $instance = new GLP_Lobos_Dev_Plugin();
-        $instance->init();
-    }
-
-    return $instance;
-}
-
-glp_lobos_dev_boot_plugin();
