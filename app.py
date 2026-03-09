@@ -13,6 +13,15 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, Column, Integer, String, Text, BigInteger, Boolean
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+import logging
+
+# ============================================================
+# LOGGING
+# ============================================================
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("lobos")
+
 # ============================================================
 # CONFIG
 # ============================================================
@@ -59,6 +68,9 @@ class UserProfile(Base):
     first_name = Column(String(128), nullable=True)
     last_name = Column(String(128), nullable=True)
     roles = Column(Text, nullable=True)
+
+    # NEW: membership info from WP JWT (JSON string)
+    membership = Column(Text, nullable=True)
 
 
 class RecipeResult(Base):
@@ -135,6 +147,10 @@ def get_user_id_from_token(token: str) -> Optional[str]:
 
 
 def token_identity_from_jwt(token: str) -> Dict[str, Any]:
+    """
+    NOTE: This is currently decode-without-verify (dev mode).
+    It returns a stable subset used by the app + membership.
+    """
     try:
         payload = jwt.decode(token, options={"verify_signature": False})
         return {
@@ -142,9 +158,10 @@ def token_identity_from_jwt(token: str) -> Dict[str, Any]:
             "first_name": payload.get("first_name"),
             "last_name": payload.get("last_name"),
             "roles": payload.get("roles") or [],
+            "membership": payload.get("membership"),
         }
     except Exception:
-        return {"email": None, "first_name": None, "last_name": None, "roles": []}
+        return {"email": None, "first_name": None, "last_name": None, "roles": [], "membership": None}
 
 
 def roles_to_human(roles: Any) -> str:
@@ -195,6 +212,13 @@ def load_options(db) -> Dict[str, List[str]]:
 
 
 def profile_to_view(p: UserProfile) -> Dict[str, Any]:
+    membership_obj = None
+    if getattr(p, "membership", None):
+        try:
+            membership_obj = json.loads(p.membership)
+        except Exception:
+            membership_obj = p.membership
+
     return {
         "user_id": p.user_id,
         "created_at": p.created_at,
@@ -207,6 +231,7 @@ def profile_to_view(p: UserProfile) -> Dict[str, Any]:
         "first_name": p.first_name,
         "last_name": p.last_name,
         "roles": p.roles,
+        "membership": membership_obj,
     }
 
 
@@ -386,6 +411,7 @@ def seed_default_options_if_empty(db) -> None:
 # ============================================================
 # ROUTES
 # ============================================================
+
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request, token: str):
     user_id = get_user_id_from_token(token)
@@ -451,7 +477,6 @@ def admin_option_add(
         raise HTTPException(status_code=400, detail="Value cannot be empty")
 
     with SessionLocal() as db:
-        # prevent duplicate active values (case-insensitive)
         existing = (
             db.query(PreferenceOption)
             .filter(PreferenceOption.category == category)
@@ -526,6 +551,7 @@ def admin_option_toggle(
 
     return RedirectResponse(url=f"/admin?token={token}", status_code=302)
 
+
 @app.get("/landing", response_class=HTMLResponse)
 def landing(request: Request, token: str):
     user_id = get_user_id_from_token(token)
@@ -534,6 +560,13 @@ def landing(request: Request, token: str):
 
     ident = token_identity_from_jwt(token)
     is_admin = is_admin_token(token)
+
+    # Debug: do we even see membership in the JWT payload?
+    logger.info("landing: user_id=%s roles=%s membership_present=%s",
+                user_id,
+                ident.get("roles"),
+                "membership" in ident and ident.get("membership") is not None)
+
     with SessionLocal() as db:
         opts = load_options(db)
 
@@ -555,8 +588,17 @@ def landing(request: Request, token: str):
         profile.email = ident.get("email")
         profile.first_name = ident.get("first_name")
         profile.last_name = ident.get("last_name")
+
         if ident.get("roles") is not None:
             profile.roles = json.dumps(ident.get("roles"))
+
+        # sync membership for display/debug (store as JSON string)
+        if "membership" in ident:
+            try:
+                profile.membership = json.dumps(ident.get("membership"))
+            except Exception:
+                profile.membership = None
+
         profile.updated_at = now_ts()
         db.commit()
 
