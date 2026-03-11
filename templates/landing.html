@@ -189,13 +189,6 @@
       gap: 12px;
     }
 
-    .row-3
-    {
-      display: grid;
-      grid-template-columns: 1fr 1fr 1fr;
-      gap: 12px;
-    }
-
     .checkbox-list
     {
       display: grid;
@@ -270,32 +263,20 @@
               </div>
 
               <div>
-                <label for="current_weight_lb">Current weight (lb)</label>
-                <input id="current_weight_lb" name="current_weight_lb" type="number" min="1" max="2000" step="0.1" />
-              </div>
-            </div>
-
-            <div class="row-2">
-              <div>
-                <label for="goal_weight_lb">Goal weight (lb)</label>
-                <input id="goal_weight_lb" name="goal_weight_lb" type="number" min="1" max="2000" step="0.1" />
-              </div>
-
-              <div>
-                <label for="height_in">Height total (inches)</label>
+                <label for="height_in">Height (inches)</label>
                 <input id="height_in" name="height_in" type="number" min="24" max="96" step="1" />
               </div>
             </div>
 
             <div class="row-2">
               <div>
-                <label for="height_ft">Height feet</label>
-                <input id="height_ft" name="height_ft" type="number" min="0" max="8" step="1" />
+                <label for="current_weight_lb">Current weight (lb)</label>
+                <input id="current_weight_lb" name="current_weight_lb" type="number" min="1" step="0.1" />
               </div>
 
               <div>
-                <label for="height_in_remainder">Height inches remainder</label>
-                <input id="height_in_remainder" name="height_in_remainder" type="number" min="0" max="11" step="1" />
+                <label for="goal_weight_lb">Goal weight (lb)</label>
+                <input id="goal_weight_lb" name="goal_weight_lb" type="number" min="1" step="0.1" />
               </div>
             </div>
 
@@ -502,8 +483,6 @@
         current_weight_lb: emptyNumberToNull(qs("current_weight_lb").value),
         goal_weight_lb: emptyNumberToNull(qs("goal_weight_lb").value),
         height_in: emptyNumberToNull(qs("height_in").value),
-        height_ft: emptyNumberToNull(qs("height_ft").value),
-        height_in_remainder: emptyNumberToNull(qs("height_in_remainder").value),
         allergy_codes: getSelectedAllergyCodes(),
         other_allergy: emptyToNull(qs("other_allergy").value),
         eating_style: emptyToNull(qs("eating_style").value),
@@ -588,8 +567,6 @@
         setInputValue("current_weight_lb", meData.current_weight_lb);
         setInputValue("goal_weight_lb", meData.goal_weight_lb);
         setInputValue("height_in", meData.height_in);
-        setInputValue("height_ft", meData.height_ft);
-        setInputValue("height_in_remainder", meData.height_in_remainder);
         setInputValue("other_allergy", meData.other_allergy);
         setInputValue("glp1_dosage", meData.glp1_dosage);
 
