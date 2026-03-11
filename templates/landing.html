@@ -4,14 +4,59 @@
   <meta charset="utf-8" />
   <title>Lobos - Preferences</title>
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    .grid { display: grid; grid-template-columns: 520px; gap: 18px; align-items: start; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-    h1 { margin: 0 0 12px 0; font-size: 22px; }
-    h2 { margin: 0 0 10px 0; font-size: 16px; }
-    h3 { margin: 14px 0 8px 0; font-size: 14px; }
-    label { display:block; margin-top: 10px; font-size: 13px; color: #333; font-weight: 600; }
-    select, input[type="text"], input[type="number"] {
+    body
+    {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 24px;
+    }
+
+    .grid
+    {
+      display: grid;
+      grid-template-columns: 520px;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .card
+    {
+      border: 1px solid #ddd;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    }
+
+    h1
+    {
+      margin: 0 0 12px 0;
+      font-size: 22px;
+    }
+
+    h2
+    {
+      margin: 0 0 10px 0;
+      font-size: 16px;
+    }
+
+    h3
+    {
+      margin: 14px 0 8px 0;
+      font-size: 14px;
+    }
+
+    label
+    {
+      display: block;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #333;
+      font-weight: 600;
+    }
+
+    select,
+    input[type="text"],
+    input[type="number"]
+    {
       width: 100%;
       padding: 10px;
       border-radius: 10px;
@@ -19,32 +64,65 @@
       font-size: 14px;
       box-sizing: border-box;
     }
-    .btn {
+
+    .btn
+    {
       padding: 11px 14px;
       border-radius: 10px;
       border: 1px solid #bbb;
       cursor: pointer;
       font-size: 14px;
-      display:inline-block;
-      text-decoration:none;
+      display: inline-block;
+      text-decoration: none;
       background: white;
       color: inherit;
     }
-    .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
-    .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
-    .btn-secondary { border-color: #444; background: #444; color: white; }
-    .muted { color:#666; font-size: 13px; }
-    .pill {
-      display:inline-block;
+
+    .btn-primary
+    {
+      border-color: #2b6cb0;
+      background: #2b6cb0;
+      color: white;
+    }
+
+    .btn-save
+    {
+      border-color: #0f766e;
+      background: #0f766e;
+      color: white;
+    }
+
+    .muted
+    {
+      color: #666;
+      font-size: 13px;
+    }
+
+    .pill
+    {
+      display: inline-block;
       padding: 2px 8px;
       border-radius: 999px;
-      background:#f2f2f2;
+      background: #f2f2f2;
       font-size: 12px;
       margin-left: 6px;
     }
-    .kv { display:grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 14px; }
-    .kv .k { color:#666; }
-    .alert-error {
+
+    .kv
+    {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 6px 12px;
+      font-size: 14px;
+    }
+
+    .kv .k
+    {
+      color: #666;
+    }
+
+    .alert-error
+    {
       margin: 0 0 14px 0;
       padding: 12px 14px;
       border: 1px solid #fecaca;
@@ -53,8 +131,16 @@
       color: #991b1b;
       font-size: 14px;
       font-weight: 600;
+      display: none;
     }
-    .alert-success {
+
+    .alert-error.show
+    {
+      display: block;
+    }
+
+    .alert-success
+    {
       margin: 0 0 14px 0;
       padding: 12px 14px;
       border: 1px solid #bbf7d0;
@@ -65,7 +151,14 @@
       font-weight: 600;
       display: none;
     }
-    .alert-info {
+
+    .alert-success.show
+    {
+      display: block;
+    }
+
+    .alert-info
+    {
       margin: 0 0 14px 0;
       padding: 12px 14px;
       border: 1px solid #bfdbfe;
@@ -76,51 +169,69 @@
       font-weight: 600;
       display: none;
     }
-    .section {
+
+    .alert-info.show
+    {
+      display: block;
+    }
+
+    .section
+    {
       margin-top: 14px;
       padding-top: 14px;
       border-top: 1px solid #eee;
     }
-    .row-2 {
+
+    .row-2
+    {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 12px;
     }
-    .checkbox-list {
+
+    .row-3
+    {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .checkbox-list
+    {
       display: grid;
       grid-template-columns: 1fr 1fr;
       gap: 8px 12px;
       margin-top: 8px;
     }
-    .checkbox-item {
+
+    .checkbox-item
+    {
       display: flex;
       align-items: center;
       gap: 8px;
       font-size: 14px;
     }
-    .checkbox-item input {
+
+    .checkbox-item input
+    {
       width: auto;
       margin: 0;
     }
-    .actions {
-      display:flex;
-      gap:10px;
-      align-items:center;
-      flex-wrap:wrap;
+
+    .actions
+    {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
       margin-top: 16px;
     }
-    .small-note {
+
+    .small-note
+    {
       margin-top: 8px;
       font-size: 12px;
       color: #666;
-    }
-    .loading {
-      color: #666;
-      font-size: 13px;
-      margin-top: 8px;
-    }
-    .hidden {
-      display: none;
     }
   </style>
 </head>
@@ -130,12 +241,12 @@
   <div class="grid">
     <div class="card">
       {% if membership_required_error %}
-        <div class="alert-error">{{ membership_required_error }}</div>
+        <div class="alert-error show">{{ membership_required_error }}</div>
       {% endif %}
 
-      <div id="saveSuccess" class="alert-success">Preferences saved.</div>
-      <div id="saveInfo" class="alert-info">Loading preferences...</div>
-      <div id="saveError" class="alert-error hidden"></div>
+      <div id="saveSuccess" class="alert-success"></div>
+      <div id="saveInfo" class="alert-info"></div>
+      <div id="saveError" class="alert-error"></div>
 
       <h2>Identity</h2>
 
@@ -143,17 +254,15 @@
         <div class="k">User ID</div><div>{{ profile.user_id }}</div>
         <div class="k">Name</div><div>{{ (profile.first_name or "") ~ " " ~ (profile.last_name or "") }}</div>
         <div class="k">Email</div><div>{{ profile.email or "" }}</div>
-        <div class="k">Roles</div><div>{{ (roles_human or "") }}</div>
+        <div class="k">Roles</div><div>{{ roles_human or "" }}</div>
       </div>
 
       {% if not membership_required_error %}
         <div class="section">
           <h2>Preferences <span class="pill">v2 onboarding</span></h2>
-          <div class="muted">
-            This page now saves through the new preferences API.
-          </div>
+          <div class="muted">This page saves through the new preferences API.</div>
 
-          <form id="prefsForm">
+          <form id="prefsForm" onsubmit="return false;">
             <div class="row-2">
               <div>
                 <label for="birth_year">Birth year</label>
@@ -161,20 +270,32 @@
               </div>
 
               <div>
-                <label for="height_in">Height (inches)</label>
+                <label for="current_weight_lb">Current weight (lb)</label>
+                <input id="current_weight_lb" name="current_weight_lb" type="number" min="1" max="2000" step="0.1" />
+              </div>
+            </div>
+
+            <div class="row-2">
+              <div>
+                <label for="goal_weight_lb">Goal weight (lb)</label>
+                <input id="goal_weight_lb" name="goal_weight_lb" type="number" min="1" max="2000" step="0.1" />
+              </div>
+
+              <div>
+                <label for="height_in">Height total (inches)</label>
                 <input id="height_in" name="height_in" type="number" min="24" max="96" step="1" />
               </div>
             </div>
 
             <div class="row-2">
               <div>
-                <label for="current_weight_lb">Current weight (lb)</label>
-                <input id="current_weight_lb" name="current_weight_lb" type="number" min="1" step="0.1" />
+                <label for="height_ft">Height feet</label>
+                <input id="height_ft" name="height_ft" type="number" min="0" max="8" step="1" />
               </div>
 
               <div>
-                <label for="goal_weight_lb">Goal weight (lb)</label>
-                <input id="goal_weight_lb" name="goal_weight_lb" type="number" min="1" step="0.1" />
+                <label for="height_in_remainder">Height inches remainder</label>
+                <input id="height_in_remainder" name="height_in_remainder" type="number" min="0" max="11" step="1" />
               </div>
             </div>
 
@@ -210,7 +331,6 @@
         </div>
       {% else %}
         <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
-
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <a class="btn" href="/me?token={{ token }}">/me debug</a>
         </div>
@@ -227,46 +347,46 @@
       return document.getElementById(id);
     }
 
+    function showBox(id, message)
+    {
+      const el = qs(id);
+      el.textContent = message;
+      el.classList.add("show");
+    }
+
+    function hideBox(id)
+    {
+      const el = qs(id);
+      el.textContent = "";
+      el.classList.remove("show");
+    }
+
     function showInfo(message)
     {
-      const el = qs("saveInfo");
-      el.textContent = message;
-      el.style.display = "block";
+      showBox("saveInfo", message);
     }
 
     function hideInfo()
     {
-      qs("saveInfo").style.display = "none";
+      hideBox("saveInfo");
     }
 
     function showSuccess(message)
     {
-      const el = qs("saveSuccess");
-      el.textContent = message;
-      el.style.display = "block";
-
+      showBox("saveSuccess", message);
       setTimeout(() => {
-        el.style.display = "none";
+        hideBox("saveSuccess");
       }, 2500);
     }
 
     function showError(message)
     {
-      const el = qs("saveError");
-      el.textContent = message;
-      el.classList.remove("hidden");
+      showBox("saveError", message);
     }
 
     function hideError()
     {
-      const el = qs("saveError");
-      el.textContent = "";
-      el.classList.add("hidden");
-    }
-
-    function safeArray(value)
-    {
-      return Array.isArray(value) ? value : [];
+      hideBox("saveError");
     }
 
     function safeString(value)
@@ -274,21 +394,25 @@
       return value == null ? "" : String(value);
     }
 
+    function safeArray(value)
+    {
+      return Array.isArray(value) ? value : [];
+    }
+
     function setInputValue(id, value)
     {
       const el = qs(id);
-      if (!el) return;
+      if (!el)
+      {
+        return;
+      }
       el.value = value == null ? "" : value;
     }
 
     function fillSelect(selectId, values, currentValue, placeholder)
     {
       const select = qs(selectId);
-      if (!select) return;
-
       select.innerHTML = "";
-
-      const normalizedValues = safeArray(values);
 
       if (placeholder)
       {
@@ -298,109 +422,40 @@
         select.appendChild(emptyOpt);
       }
 
-      for (const raw of normalizedValues)
+      for (const raw of safeArray(values))
       {
-        let value = "";
-        let label = "";
-
-        if (raw != null && typeof raw === "object")
-        {
-          value = safeString(raw.value ?? raw.code ?? raw.label ?? "");
-          label = safeString(raw.label ?? raw.value ?? raw.code ?? "");
-        }
-        else
-        {
-          value = safeString(raw);
-          label = safeString(raw);
-        }
-
+        const value = safeString(raw);
         const opt = document.createElement("option");
         opt.value = value;
-        opt.textContent = label;
-        if (safeString(currentValue) === value)
+        opt.textContent = value;
+        if (value === safeString(currentValue))
         {
           opt.selected = true;
         }
         select.appendChild(opt);
       }
-
-      if (safeString(currentValue) && !normalizedValues.some(v => {
-        if (v != null && typeof v === "object")
-        {
-          return safeString(v.value ?? v.code ?? v.label ?? "") === safeString(currentValue);
-        }
-        return safeString(v) === safeString(currentValue);
-      }))
-      {
-        const opt = document.createElement("option");
-        opt.value = safeString(currentValue);
-        opt.textContent = safeString(currentValue);
-        opt.selected = true;
-        select.appendChild(opt);
-      }
     }
 
-    function extractOptions(optionsData, keys, fallback)
-    {
-      for (const key of keys)
-      {
-        const value = optionsData[key];
-        if (Array.isArray(value))
-        {
-          return value;
-        }
-      }
-      return fallback;
-    }
-
-    function normalizeSelectedAllergies(meData)
-    {
-      const raw =
-        meData.allergy_option_ids ??
-        meData.allergy_ids ??
-        meData.user_allergy_ids ??
-        meData.allergies ??
-        [];
-
-      if (!Array.isArray(raw))
-      {
-        return [];
-      }
-
-      return raw.map(item => {
-        if (item != null && typeof item === "object")
-        {
-          if (item.id != null) return String(item.id);
-          if (item.allergy_option_id != null) return String(item.allergy_option_id);
-          if (item.code != null) return String(item.code);
-          if (item.label != null) return String(item.label);
-        }
-        return String(item);
-      });
-    }
-
-    function renderAllergies(allergyOptions, selectedValues)
+    function renderAllergies(options, selectedCodes)
     {
       const wrap = qs("allergyOptions");
       wrap.innerHTML = "";
 
-      const selectedSet = new Set(selectedValues.map(v => String(v)));
+      const selectedSet = new Set(safeArray(selectedCodes).map(v => String(v)));
 
-      for (const raw of safeArray(allergyOptions))
+      for (const item of safeArray(options))
       {
-        const item = raw && typeof raw === "object" ? raw : { value: raw, label: raw };
-
-        const idValue = String(item.id ?? item.value ?? item.code ?? item.label ?? "");
-        const label = safeString(item.label ?? item.value ?? item.code ?? idValue);
+        const code = safeString(item.code);
+        const label = safeString(item.label || item.code);
 
         const labelEl = document.createElement("label");
         labelEl.className = "checkbox-item";
 
         const checkbox = document.createElement("input");
         checkbox.type = "checkbox";
-        checkbox.name = "allergy_option_ids";
-        checkbox.value = idValue;
-        checkbox.checked = selectedSet.has(idValue) || selectedSet.has(label);
+        checkbox.name = "allergy_codes";
+        checkbox.value = code;
+        checkbox.checked = selectedSet.has(code);
 
         const span = document.createElement("span");
         span.textContent = label;
@@ -411,37 +466,50 @@
       }
     }
 
-    function getSelectedAllergyIds()
+    function getSelectedAllergyCodes()
     {
-      return Array.from(document.querySelectorAll('input[name="allergy_option_ids"]:checked'))
-        .map(el => {
-          const n = Number(el.value);
-          return Number.isNaN(n) ? el.value : n;
-        });
-    }
-
-    function buildPayload()
-    {
-      const payload = {
-        birth_year: emptyToNull(qs("birth_year").value),
-        current_weight_lb: emptyToNull(qs("current_weight_lb").value),
-        goal_weight_lb: emptyToNull(qs("goal_weight_lb").value),
-        height_in: emptyToNull(qs("height_in").value),
-        eating_style: emptyToNull(qs("eating_style").value),
-        glp1_status: emptyToNull(qs("glp1_status").value),
-        glp1_dosage: emptyToNull(qs("glp1_dosage").value),
-        other_allergy: emptyToNull(qs("other_allergy").value),
-        allergy_option_ids: getSelectedAllergyIds()
-      };
-
-      return payload;
+      return Array.from(document.querySelectorAll('input[name="allergy_codes"]:checked'))
+        .map(el => el.value);
     }
 
     function emptyToNull(value)
     {
-      if (value == null) return null;
+      if (value == null)
+      {
+        return null;
+      }
+
       const text = String(value).trim();
       return text === "" ? null : text;
+    }
+
+    function emptyNumberToNull(value)
+    {
+      const text = emptyToNull(value);
+      if (text === null)
+      {
+        return null;
+      }
+
+      const n = Number(text);
+      return Number.isNaN(n) ? null : n;
+    }
+
+    function buildPayload()
+    {
+      return {
+        birth_year: emptyNumberToNull(qs("birth_year").value),
+        current_weight_lb: emptyNumberToNull(qs("current_weight_lb").value),
+        goal_weight_lb: emptyNumberToNull(qs("goal_weight_lb").value),
+        height_in: emptyNumberToNull(qs("height_in").value),
+        height_ft: emptyNumberToNull(qs("height_ft").value),
+        height_in_remainder: emptyNumberToNull(qs("height_in_remainder").value),
+        allergy_codes: getSelectedAllergyCodes(),
+        other_allergy: emptyToNull(qs("other_allergy").value),
+        eating_style: emptyToNull(qs("eating_style").value),
+        glp1_status: emptyToNull(qs("glp1_status").value),
+        glp1_dosage: emptyToNull(qs("glp1_dosage").value)
+      };
     }
 
     async function apiGet(url)
@@ -460,7 +528,7 @@
         throw new Error(text || ("GET failed: " + response.status));
       }
 
-      return response.json();
+      return await response.json();
     }
 
     async function apiPost(url, payload)
@@ -472,7 +540,7 @@
           "Content-Type": "application/json",
           "Accept": "application/json"
         },
-        body: payload == null ? null : JSON.stringify(payload)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok)
@@ -487,14 +555,7 @@
         return {};
       }
 
-      try
-      {
-        return JSON.parse(text);
-      }
-      catch
-      {
-        return {};
-      }
+      return JSON.parse(text);
     }
 
     async function loadPageData()
@@ -509,36 +570,30 @@
           apiGet(`/api/preferences/me?token=${encodeURIComponent(TOKEN)}`)
         ]);
 
-        const eatingStyleOptions = extractOptions(
-          optionsData,
-          ["eating_style", "eating_style_options"],
-          []
+        fillSelect(
+          "eating_style",
+          optionsData.eating_style_options || [],
+          meData.eating_style,
+          "Select eating style"
         );
 
-        const glp1StatusOptions = extractOptions(
-          optionsData,
-          ["glp1_status", "glp1_status_options"],
-          ["Not taking GLP-1", "Currently taking GLP-1", "Prefer not to say"]
-        );
-
-        const allergyOptions = extractOptions(
-          optionsData,
-          ["allergies", "allergy_options"],
-          []
+        fillSelect(
+          "glp1_status",
+          optionsData.glp1_status_options || [],
+          meData.glp1_status,
+          "Select GLP-1 status"
         );
 
         setInputValue("birth_year", meData.birth_year);
         setInputValue("current_weight_lb", meData.current_weight_lb);
         setInputValue("goal_weight_lb", meData.goal_weight_lb);
         setInputValue("height_in", meData.height_in);
-        setInputValue("glp1_dosage", meData.glp1_dosage);
+        setInputValue("height_ft", meData.height_ft);
+        setInputValue("height_in_remainder", meData.height_in_remainder);
         setInputValue("other_allergy", meData.other_allergy);
+        setInputValue("glp1_dosage", meData.glp1_dosage);
 
-        fillSelect("eating_style", eatingStyleOptions, meData.eating_style, "Select eating style");
-        fillSelect("glp1_status", glp1StatusOptions, meData.glp1_status, "Select GLP-1 status");
-
-        const selectedAllergies = normalizeSelectedAllergies(meData);
-        renderAllergies(allergyOptions, selectedAllergies);
+        renderAllergies(optionsData.allergies || [], meData.allergy_codes || []);
 
         hideInfo();
 
