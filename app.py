@@ -3,15 +3,29 @@ import json
 import time
 import hashlib
 import re
+
 from typing import Optional, Dict, List, Any, Tuple
+from datetime import datetime, timezone
 
 import jwt
 import requests
-from fastapi import FastAPI, Request, Form, HTTPException
+from fastapi import FastAPI, Request, Form, HTTPException, Query
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine, Column, Integer, String, Text, BigInteger, Boolean
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    String,
+    Text,
+    BigInteger,
+    Boolean,
+    ForeignKey,
+    UniqueConstraint,
+    DateTime,
+)
 from sqlalchemy.orm import sessionmaker, declarative_base
+
 
 import logging
 
@@ -30,6 +44,9 @@ DATABASE_URL = os.getenv(
     "LOBOS_DATABASE_URL",
     "postgresql+psycopg2://lobos_user:lobos_pass@127.0.0.1:5432/lobos_db",
 )
+
+LOBOS_JWT_SECRET = os.getenv("LOBOS_JWT_SECRET", "").strip()
+LOBOS_JWT_ISSUER = os.getenv("LOBOS_JWT_ISSUER", "wp-sim").strip()
 
 OLLAMA_BASE_URL = os.getenv("LOBOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
 FAST_MODEL = os.getenv("LOBOS_OLLAMA_MODEL_FAST", "mistral:latest")
@@ -60,6 +77,58 @@ templates = Jinja2Templates(directory="templates")
 # MODELS
 # ============================================================
 
+class LobosUser(Base):
+    __tablename__ = "lobos_users"
+
+    id = Column(BigInteger, primary_key=True)
+    email = Column(Text, nullable=True)
+    first_name = Column(Text, nullable=True)
+    last_name = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class ExternalIdentity(Base):
+    __tablename__ = "external_identities"
+
+    id = Column(BigInteger, primary_key=True)
+    lobos_user_id = Column(BigInteger, ForeignKey("lobos_users.id"), nullable=False)
+
+    provider = Column(Text, nullable=False)
+    issuer = Column(Text, nullable=False)
+    external_user_id = Column(Text, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("provider", "issuer", "external_user_id", name="uq_external_identity"),
+    )
+
+
+class UserPreference(Base):
+    __tablename__ = "user_preferences"
+
+    lobos_user_id = Column(BigInteger, ForeignKey("lobos_users.id"), primary_key=True)
+
+    current_weight = Column(Text, nullable=True)
+    goal_weight = Column(Text, nullable=True)
+    height = Column(Text, nullable=True)
+    age = Column(Integer, nullable=True)
+
+    eating_style = Column(String(128), nullable=True)
+    meal_type = Column(String(64), nullable=True)
+    macro_preset = Column(String(128), nullable=True)
+    prep = Column(String(128), nullable=True)
+
+    glp1_status = Column(Text, nullable=True)
+    glp1_dosage = Column(Text, nullable=True)
+
+    onboarding_completed = Column(Boolean, nullable=False, default=False)
+    onboarding_completed_at = Column(DateTime(timezone=True), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+
+
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 
@@ -77,7 +146,6 @@ class UserProfile(Base):
     first_name = Column(String(128), nullable=True)
     last_name = Column(String(128), nullable=True)
     roles = Column(Text, nullable=True)
-
     membership = Column(Text, nullable=True)
 
 
@@ -118,6 +186,8 @@ Base.metadata.create_all(bind=engine)
 def now_ts() -> int:
     return int(time.time())
 
+def now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 def clean_title(t: str) -> str:
     if not t:
@@ -132,6 +202,50 @@ def clean_title(t: str) -> str:
 
     t = re.sub(r"\s+", " ", t).strip()
     return t
+
+
+def normalize_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text if text else None
+
+
+def get_nested(obj: Any, *keys: str) -> Any:
+    current = obj
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return current
+
+
+def verify_and_get_payload(token: str) -> Dict[str, Any]:
+    if not LOBOS_JWT_SECRET:
+        raise HTTPException(status_code=500, detail="LOBOS_JWT_SECRET is not configured")
+
+    try:
+        payload = jwt.decode(
+            token,
+            LOBOS_JWT_SECRET,
+            algorithms=["HS256"],
+            issuer=LOBOS_JWT_ISSUER,
+            options={"require": ["iss", "sub", "iat", "nbf", "exp"]},
+        )
+    except jwt.ExpiredSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token expired") from exc
+    except jwt.ImmatureSignatureError as exc:
+        raise HTTPException(status_code=401, detail="Token not yet valid") from exc
+    except jwt.InvalidIssuerError as exc:
+        raise HTTPException(status_code=401, detail="Invalid issuer") from exc
+    except jwt.InvalidTokenError as exc:
+        raise HTTPException(status_code=401, detail="Invalid token") from exc
+
+    sub = normalize_text(payload.get("sub"))
+    if not sub:
+        raise HTTPException(status_code=401, detail="Invalid token (missing sub)")
+
+    return payload
 
 
 def get_raw_payload_from_token(token: str) -> Dict[str, Any]:
@@ -152,8 +266,7 @@ def get_user_id_from_token(token: str) -> Optional[str]:
 
 def token_identity_from_jwt(token: str) -> Dict[str, Any]:
     """
-    NOTE: decode-without-verify (dev mode).
-    Reads from payload.identity first, then falls back to top-level for compatibility.
+    NOTE: decode-without-verify only for display/debug after /login has already verified.
     """
     try:
         payload = get_raw_payload_from_token(token)
@@ -215,6 +328,11 @@ def has_required_membership(membership: Any) -> bool:
     membership_obj = membership_to_dict(membership)
     memberpress = membership_obj.get("memberpress", {})
 
+    active = memberpress.get("active")
+    if isinstance(active, bool):
+        if active:
+            return True
+
     memberships = memberpress.get("memberships", [])
     if not isinstance(memberships, list):
         memberships = []
@@ -237,7 +355,7 @@ def has_required_membership(membership: Any) -> bool:
             item_title == LOBOS_REQUIRED_MEMBERSHIP_TITLE
         )
 
-        if (id_match or title_match) and item_status == "complete":
+        if (id_match or title_match) and item_status in ("complete", "active"):
             return True
 
     return False
@@ -466,9 +584,234 @@ def seed_default_options_if_empty(db) -> None:
         db.add(PreferenceOption(category=cat, value=val, sort_order=order, is_active=True))
     db.commit()
 
+
+def find_external_identity(db, provider: str, issuer: str, external_user_id: str) -> Optional[ExternalIdentity]:
+    return (
+        db.query(ExternalIdentity)
+        .filter(ExternalIdentity.provider == provider)
+        .filter(ExternalIdentity.issuer == issuer)
+        .filter(ExternalIdentity.external_user_id == external_user_id)
+        .first()
+    )
+
+def create_lobos_user_and_identity(
+    db,
+    provider: str,
+    issuer: str,
+    external_user_id: str,
+    email: Optional[str],
+    first_name: Optional[str],
+    last_name: Optional[str],
+) -> LobosUser:
+    now = now_utc()
+
+    user = LobosUser(
+        email=email,
+        first_name=first_name,
+        last_name=last_name,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(user)
+    db.flush()
+
+    identity = ExternalIdentity(
+        lobos_user_id=user.id,
+        provider=provider,
+        issuer=issuer,
+        external_user_id=external_user_id,
+        created_at=now,
+        last_login_at=now,
+    )
+    db.add(identity)
+    db.flush()
+
+    return user
+
+def update_lobos_user_basics(
+    user: LobosUser,
+    email: Optional[str],
+    first_name: Optional[str],
+    last_name: Optional[str],
+) -> None:
+    changed = False
+
+    if email is not None and email != user.email:
+        user.email = email
+        changed = True
+
+    if first_name is not None and first_name != user.first_name:
+        user.first_name = first_name
+        changed = True
+
+    if last_name is not None and last_name != user.last_name:
+        user.last_name = last_name
+        changed = True
+
+    if changed:
+        user.updated_at = now_utc()
+
+
+def get_or_create_user_profile_from_identity(
+    db,
+    user_id: str,
+    ident: Dict[str, Any],
+) -> UserProfile:
+    opts = load_options(db)
+
+    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+    if not profile:
+        profile = UserProfile(
+            user_id=user_id,
+            created_at=now_ts(),
+            updated_at=now_ts(),
+            eating_style=opts["eating_style"][0],
+            meal_type=opts["meal_type"][0],
+            macro_preset=opts["macro_preset"][0],
+            prep=opts["prep"][0],
+        )
+        db.add(profile)
+        db.flush()
+
+    profile.email = ident.get("email")
+    profile.first_name = ident.get("first_name")
+    profile.last_name = ident.get("last_name")
+
+    if ident.get("roles") is not None:
+        profile.roles = json.dumps(ident.get("roles"))
+
+    if "membership" in ident:
+        try:
+            profile.membership = json.dumps(ident.get("membership"))
+        except Exception:
+            profile.membership = None
+
+    profile.updated_at = now_ts()
+    db.flush()
+    return profile
+
+def ensure_user_preferences_row(
+    db,
+    lobos_user_id: int,
+    profile: UserProfile,
+) -> UserPreference:
+    prefs = db.query(UserPreference).filter(UserPreference.lobos_user_id == lobos_user_id).first()
+    if not prefs:
+        prefs = UserPreference(
+            lobos_user_id=lobos_user_id,
+            current_weight=None,
+            goal_weight=None,
+            height=None,
+            age=None,
+            eating_style=profile.eating_style,
+            meal_type=profile.meal_type,
+            macro_preset=profile.macro_preset,
+            prep=profile.prep,
+            glp1_status=None,
+            glp1_dosage=None,
+            onboarding_completed=False,
+            onboarding_completed_at=None,
+            updated_at=now_utc(),
+        )
+        db.add(prefs)
+        db.flush()
+    return prefs
+
+def is_onboarding_complete(prefs: Optional[UserPreference]) -> bool:
+    return bool(prefs and prefs.onboarding_completed)
+
 # ============================================================
 # ROUTES
 # ============================================================
+
+@app.get("/login")
+def login(token: str = Query(..., min_length=1)):
+    payload = verify_and_get_payload(token)
+
+    issuer = normalize_text(payload.get("iss"))
+    external_user_id = normalize_text(payload.get("sub"))
+    if issuer is None or external_user_id is None:
+        raise HTTPException(status_code=401, detail="Invalid token (missing issuer or sub)")
+
+    identity = payload.get("identity")
+    if not isinstance(identity, dict):
+        identity = {}
+
+    ident = {
+        "email": identity.get("email", payload.get("email")),
+        "first_name": identity.get("first_name", payload.get("first_name")),
+        "last_name": identity.get("last_name", payload.get("last_name")),
+        "roles": identity.get("roles", payload.get("roles")) or [],
+        "membership": identity.get("membership", payload.get("membership")),
+    }
+
+    membership_ok = has_required_membership(ident.get("membership"))
+    provider = "wordpress"
+
+    with SessionLocal() as db:
+        external_identity = find_external_identity(db, provider, issuer, external_user_id)
+
+        if external_identity is None:
+            lobos_user = create_lobos_user_and_identity(
+                db=db,
+                provider=provider,
+                issuer=issuer,
+                external_user_id=external_user_id,
+                email=normalize_text(ident.get("email")),
+                first_name=normalize_text(ident.get("first_name")),
+                last_name=normalize_text(ident.get("last_name")),
+            )
+        else:
+            lobos_user = db.query(LobosUser).filter(LobosUser.id == external_identity.lobos_user_id).first()
+            if lobos_user is None:
+                raise HTTPException(status_code=500, detail="Identity mapping exists but Lobos user not found")
+
+            update_lobos_user_basics(
+                lobos_user,
+                email=normalize_text(ident.get("email")),
+                first_name=normalize_text(ident.get("first_name")),
+                last_name=normalize_text(ident.get("last_name")),
+            )
+            external_identity.last_login_at = now_utc()
+
+        profile = get_or_create_user_profile_from_identity(
+            db=db,
+            user_id=external_user_id,
+            ident=ident,
+        )
+
+        prefs = ensure_user_preferences_row(
+            db=db,
+            lobos_user_id=lobos_user.id,
+            profile=profile,
+        )
+
+        db.commit()
+
+        if LOBOS_REQUIRE_MEMBERSHIP and not membership_ok:
+            return RedirectResponse(url=f"/access-denied?token={token}", status_code=302)
+
+        if not is_onboarding_complete(prefs):
+            return RedirectResponse(url=f"/landing?token={token}", status_code=302)
+
+        return RedirectResponse(url=f"/my-recipe?token={token}", status_code=302)
+
+
+@app.get("/access-denied", response_class=HTMLResponse)
+def access_denied(token: Optional[str] = None):
+    return HTMLResponse(
+        """
+        <html>
+        <head><title>Lobos - Access Denied</title></head>
+        <body style="font-family: sans-serif; margin: 40px;">
+            <h1>Access denied</h1>
+            <p>Active membership required to access Lobos.</p>
+        </body>
+        </html>
+        """,
+        status_code=403,
+    )
+
 
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request, token: str):
@@ -742,16 +1085,58 @@ def prefs_save(
                 prep=prep,
             )
             db.add(profile)
-            db.commit()
+            db.flush()
         else:
             profile.eating_style = eating_style
             profile.meal_type = meal_type
             profile.macro_preset = macro_preset
             profile.prep = prep
             profile.updated_at = now_ts()
-            db.commit()
 
-    return RedirectResponse(url=f"/landing?token={token}", status_code=302)
+        external_identity = (
+            db.query(ExternalIdentity)
+            .filter(ExternalIdentity.provider == "wordpress")
+            .filter(ExternalIdentity.issuer == LOBOS_JWT_ISSUER)
+            .filter(ExternalIdentity.external_user_id == user_id)
+            .first()
+        )
+
+        if external_identity:
+            prefs = db.query(UserPreference).filter(
+                UserPreference.lobos_user_id == external_identity.lobos_user_id
+            ).first()
+
+            if prefs is None:
+                prefs = UserPreference(
+                    lobos_user_id=external_identity.lobos_user_id,
+                    current_weight=None,
+                    goal_weight=None,
+                    height=None,
+                    age=None,
+                    eating_style=eating_style,
+                    meal_type=meal_type,
+                    macro_preset=macro_preset,
+                    prep=prep,
+                    glp1_status=None,
+                    glp1_dosage=None,
+                    onboarding_completed=True,
+                    onboarding_completed_at=now_utc(),
+                    updated_at=now_utc(),
+                )
+                db.add(prefs)
+            else:
+                prefs.eating_style = eating_style
+                prefs.meal_type = meal_type
+                prefs.macro_preset = macro_preset
+                prefs.prep = prep
+                prefs.onboarding_completed = True
+                if prefs.onboarding_completed_at is None:
+                    prefs.onboarding_completed_at = now_utc()
+                prefs.updated_at = now_utc()
+
+        db.commit()
+
+    return RedirectResponse(url=f"/my-recipe?token={token}", status_code=302)
 
 
 @app.get("/my-recipe", response_class=HTMLResponse)
@@ -868,3 +1253,9 @@ def me(token: str):
 
     ident = token_identity_from_jwt(token)
     return HTMLResponse("<pre>" + json.dumps({"user_id": user_id, "identity": ident}, indent=2) + "</pre>")
+
+
+@app.get("/me/login-debug", response_class=HTMLResponse)
+def me_login_debug(token: str):
+    payload = verify_and_get_payload(token)
+    return HTMLResponse("<pre>" + json.dumps(payload, indent=2) + "</pre>")

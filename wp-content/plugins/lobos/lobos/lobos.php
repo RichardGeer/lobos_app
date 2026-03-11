@@ -17,7 +17,7 @@ if (!class_exists('Lobos_Dev_SSO_Plugin'))
     {
         const OPTION_KEY = 'lobos_dev_sso_options';
 
-        const DEFAULT_URL = 'http://my.glp.com:8000/landing';
+        const DEFAULT_URL = 'http://my.glp.com:8000/login';
         const DEFAULT_SECRET = '5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT';
         const DEFAULT_ISSUER = 'wp-sim';
         const DEFAULT_REQUIRE_MEMBERSHIP = 0;
