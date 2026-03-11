@@ -1,33 +1,37 @@
+from __future__ import annotations
+
 import os
 import json
 import time
 import hashlib
 import re
+import logging
 
 from typing import Optional, Dict, List, Any, Tuple
 from datetime import datetime, timezone
 
 import jwt
 import requests
-from fastapi import FastAPI, Request, Form, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI
+from fastapi import Request
+from fastapi import Form
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi.responses import HTMLResponse
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import (
-    create_engine,
-    Column,
-    Integer,
-    String,
-    Text,
-    BigInteger,
-    Boolean,
-    ForeignKey,
-    UniqueConstraint,
-    DateTime,
-)
-from sqlalchemy.orm import sessionmaker, declarative_base
 
+from db import Base
+from db import SessionLocal
+from db import engine
+from models import ExternalIdentity
+from models import LobosUser
+from models import PreferenceOption
+from models import RecipeResult
+from models import UserPreference
+from models import UserProfile
+from preferences import router as preferences_router
 
-import logging
 
 # ============================================================
 # LOGGING
@@ -40,11 +44,6 @@ logger = logging.getLogger("lobos")
 # CONFIG
 # ============================================================
 
-DATABASE_URL = os.getenv(
-    "LOBOS_DATABASE_URL",
-    "postgresql+psycopg2://lobos_user:lobos_pass@127.0.0.1:5432/lobos_db",
-)
-
 LOBOS_JWT_SECRET = os.getenv("LOBOS_JWT_SECRET", "").strip()
 LOBOS_JWT_ISSUER = os.getenv("LOBOS_JWT_ISSUER", "wp-sim").strip()
 
@@ -56,126 +55,19 @@ RECIPE_MAX_CACHE_AGE_DAYS = int(
     os.getenv("LOBOS_RECIPE_MAX_CACHE_AGE_DAYS", os.getenv("RECIPE_MAX_CACHE_AGE_IN_DAYS", "7"))
 )
 
-# Membership gate
 LOBOS_REQUIRED_MEMBERSHIP_ID = int(os.getenv("LOBOS_REQUIRED_MEMBERSHIP_ID", "27"))
 LOBOS_REQUIRED_MEMBERSHIP_TITLE = os.getenv(
     "LOBOS_REQUIRED_MEMBERSHIP_TITLE",
-    "GLP-1 Action Plan Hub"
+    "GLP-1 Action Plan Hub",
 ).strip()
 LOBOS_REQUIRE_MEMBERSHIP = os.getenv("LOBOS_REQUIRE_MEMBERSHIP", "1").strip().lower() in (
     "1", "true", "yes", "on"
 )
 
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-Base = declarative_base()
-
 app = FastAPI()
+app.include_router(preferences_router)
+
 templates = Jinja2Templates(directory="templates")
-
-# ============================================================
-# MODELS
-# ============================================================
-
-class LobosUser(Base):
-    __tablename__ = "lobos_users"
-
-    id = Column(BigInteger, primary_key=True)
-    email = Column(Text, nullable=True)
-    first_name = Column(Text, nullable=True)
-    last_name = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), nullable=False)
-    updated_at = Column(DateTime(timezone=True), nullable=False)
-
-
-class ExternalIdentity(Base):
-    __tablename__ = "external_identities"
-
-    id = Column(BigInteger, primary_key=True)
-    lobos_user_id = Column(BigInteger, ForeignKey("lobos_users.id"), nullable=False)
-
-    provider = Column(Text, nullable=False)
-    issuer = Column(Text, nullable=False)
-    external_user_id = Column(Text, nullable=False)
-
-    created_at = Column(DateTime(timezone=True), nullable=False)
-    last_login_at = Column(DateTime(timezone=True), nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("provider", "issuer", "external_user_id", name="uq_external_identity"),
-    )
-
-
-class UserPreference(Base):
-    __tablename__ = "user_preferences"
-
-    lobos_user_id = Column(BigInteger, ForeignKey("lobos_users.id"), primary_key=True)
-
-    current_weight = Column(Text, nullable=True)
-    goal_weight = Column(Text, nullable=True)
-    height = Column(Text, nullable=True)
-    age = Column(Integer, nullable=True)
-
-    eating_style = Column(String(128), nullable=True)
-    meal_type = Column(String(64), nullable=True)
-    macro_preset = Column(String(128), nullable=True)
-    prep = Column(String(128), nullable=True)
-
-    glp1_status = Column(Text, nullable=True)
-    glp1_dosage = Column(Text, nullable=True)
-
-    onboarding_completed = Column(Boolean, nullable=False, default=False)
-    onboarding_completed_at = Column(DateTime(timezone=True), nullable=True)
-    updated_at = Column(DateTime(timezone=True), nullable=False)
-
-
-class UserProfile(Base):
-    __tablename__ = "user_profiles"
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String(128), unique=True, nullable=False)
-    created_at = Column(BigInteger, nullable=False)
-    updated_at = Column(BigInteger, nullable=False)
-
-    eating_style = Column(String(128), nullable=False)
-    meal_type = Column(String(64), nullable=False)
-    macro_preset = Column(String(128), nullable=False)
-    prep = Column(String(128), nullable=False)
-
-    email = Column(String(256), nullable=True)
-    first_name = Column(String(128), nullable=True)
-    last_name = Column(String(128), nullable=True)
-    roles = Column(Text, nullable=True)
-    membership = Column(Text, nullable=True)
-
-
-class RecipeResult(Base):
-    __tablename__ = "recipe_results"
-
-    id = Column(Integer, primary_key=True)
-    user_id = Column(String(128), nullable=False)
-    created_at = Column(BigInteger, nullable=False)
-
-    request_hash = Column(String(64), nullable=False)
-    request_json = Column(Text, nullable=False)
-
-    response_text = Column(Text, nullable=False)
-    model = Column(String(128), nullable=True)
-    prompt_hash = Column(String(64), nullable=True)
-
-    title = Column(String(256), nullable=True)
-    preview = Column(Text, nullable=True)
-
-
-class PreferenceOption(Base):
-    __tablename__ = "preference_options"
-
-    id = Column(Integer, primary_key=True)
-    category = Column(String(64), nullable=False)
-    value = Column(String(256), nullable=False)
-    sort_order = Column(Integer, nullable=False, default=0)
-    is_active = Column(Boolean, nullable=False, default=True)
-
 
 Base.metadata.create_all(bind=engine)
 
@@ -186,12 +78,15 @@ Base.metadata.create_all(bind=engine)
 def now_ts() -> int:
     return int(time.time())
 
+
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
 
 def clean_title(t: str) -> str:
     if not t:
         return ""
+
     t = t.strip()
 
     if t.startswith("#"):
@@ -207,6 +102,7 @@ def clean_title(t: str) -> str:
 def normalize_text(value: Any) -> Optional[str]:
     if value is None:
         return None
+
     text = str(value).strip()
     return text if text else None
 
@@ -265,9 +161,6 @@ def get_user_id_from_token(token: str) -> Optional[str]:
 
 
 def token_identity_from_jwt(token: str) -> Dict[str, Any]:
-    """
-    NOTE: decode-without-verify only for display/debug after /login has already verified.
-    """
     try:
         payload = get_raw_payload_from_token(token)
         identity = payload.get("identity")
@@ -294,8 +187,10 @@ def token_identity_from_jwt(token: str) -> Dict[str, Any]:
 def roles_to_human(roles: Any) -> str:
     if not roles:
         return ""
+
     if isinstance(roles, list):
         return ", ".join([str(r) for r in roles])
+
     if isinstance(roles, str):
         try:
             x = json.loads(roles)
@@ -303,6 +198,7 @@ def roles_to_human(roles: Any) -> str:
                 return ", ".join([str(r) for r in x])
         except Exception:
             pass
+
     return str(roles)
 
 
@@ -329,9 +225,8 @@ def has_required_membership(membership: Any) -> bool:
     memberpress = membership_obj.get("memberpress", {})
 
     active = memberpress.get("active")
-    if isinstance(active, bool):
-        if active:
-            return True
+    if isinstance(active, bool) and active:
+        return True
 
     memberships = memberpress.get("memberships", [])
     if not isinstance(memberships, list):
@@ -346,13 +241,13 @@ def has_required_membership(membership: Any) -> bool:
         item_status = str(item.get("status", "")).strip().lower()
 
         id_match = (
-            LOBOS_REQUIRED_MEMBERSHIP_ID > 0 and
-            item_id == LOBOS_REQUIRED_MEMBERSHIP_ID
+            LOBOS_REQUIRED_MEMBERSHIP_ID > 0
+            and item_id == LOBOS_REQUIRED_MEMBERSHIP_ID
         )
 
         title_match = (
-            bool(LOBOS_REQUIRED_MEMBERSHIP_TITLE) and
-            item_title == LOBOS_REQUIRED_MEMBERSHIP_TITLE
+            bool(LOBOS_REQUIRED_MEMBERSHIP_TITLE)
+            and item_title == LOBOS_REQUIRED_MEMBERSHIP_TITLE
         )
 
         if (id_match or title_match) and item_status in ("complete", "active"):
@@ -376,9 +271,9 @@ def load_options(db) -> Dict[str, List[str]]:
         .all()
     )
 
-    for r in rows:
-        if r.category in opts:
-            opts[r.category].append(r.value)
+    for row in rows:
+        if row.category in opts:
+            opts[row.category].append(row.value)
 
     if not opts["eating_style"]:
         opts["eating_style"] = ["No Preference"]
@@ -529,7 +424,7 @@ def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], wan
     response_text = call_ollama(model, prompt)
     title, preview = extract_title_and_preview(response_text)
 
-    r = RecipeResult(
+    row = RecipeResult(
         user_id=user_id,
         created_at=now_ts(),
         request_hash=req_hash,
@@ -541,14 +436,15 @@ def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], wan
         preview=preview,
     )
 
-    db.add(r)
+    db.add(row)
     db.commit()
-    return r
+    return row
 
 
 def is_admin_token(token: str) -> bool:
     ident = token_identity_from_jwt(token)
     roles = ident.get("roles") or []
+
     if isinstance(roles, str):
         try:
             roles = json.loads(roles)
@@ -567,21 +463,19 @@ def seed_default_options_if_empty(db) -> None:
         ("eating_style", "High Protein", 10),
         ("eating_style", "Low Carb", 20),
         ("eating_style", "No Preference", 999),
-
         ("meal_type", "Breakfast", 10),
         ("meal_type", "Lunch", 20),
         ("meal_type", "Dinner", 30),
         ("meal_type", "Snack", 40),
         ("meal_type", "Dessert", 50),
-
         ("macro_preset", "40/40/20 (Protein-Enhanced Lean)", 10),
-
         ("prep", "5-Ingredient", 10),
         ("prep", "Standard", 20),
     ]
 
     for cat, val, order in defaults:
         db.add(PreferenceOption(category=cat, value=val, sort_order=order, is_active=True))
+
     db.commit()
 
 
@@ -593,6 +487,7 @@ def find_external_identity(db, provider: str, issuer: str, external_user_id: str
         .filter(ExternalIdentity.external_user_id == external_user_id)
         .first()
     )
+
 
 def create_lobos_user_and_identity(
     db,
@@ -627,6 +522,7 @@ def create_lobos_user_and_identity(
     db.flush()
 
     return user
+
 
 def update_lobos_user_basics(
     user: LobosUser,
@@ -690,6 +586,7 @@ def get_or_create_user_profile_from_identity(
     db.flush()
     return profile
 
+
 def ensure_user_preferences_row(
     db,
     lobos_user_id: int,
@@ -717,8 +614,10 @@ def ensure_user_preferences_row(
         db.flush()
     return prefs
 
+
 def is_onboarding_complete(prefs: Optional[UserPreference]) -> bool:
     return bool(prefs and prefs.onboarding_completed)
+
 
 # ============================================================
 # ROUTES
@@ -836,14 +735,14 @@ def admin(request: Request, token: str):
         )
 
         grouped = {"eating_style": [], "meal_type": [], "macro_preset": [], "prep": []}
-        for r in rows:
-            if r.category in grouped:
-                grouped[r.category].append(
+        for row in rows:
+            if row.category in grouped:
+                grouped[row.category].append(
                     {
-                        "id": r.id,
-                        "value": r.value,
-                        "sort_order": r.sort_order,
-                        "is_active": bool(r.is_active),
+                        "id": row.id,
+                        "value": row.value,
+                        "sort_order": row.sort_order,
+                        "is_active": bool(row.is_active),
                     }
                 )
 
@@ -872,6 +771,7 @@ def admin_option_add(
 
     category = (category or "").strip()
     value = (value or "").strip()
+
     if category not in ("eating_style", "meal_type", "macro_preset", "prep"):
         raise HTTPException(status_code=400, detail="Invalid category")
     if not value:
@@ -1168,14 +1068,14 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
         selected_model = (selected.model if selected else "") or ""
 
         history_view = []
-        for r in history:
+        for row in history:
             history_view.append(
                 {
-                    "id": r.id,
-                    "created_at": r.created_at,
-                    "model": r.model or "",
-                    "title": clean_title((r.title or "").strip()),
-                    "preview": (r.preview or "").strip(),
+                    "id": row.id,
+                    "created_at": row.created_at,
+                    "model": row.model or "",
+                    "title": clean_title((row.title or "").strip()),
+                    "preview": (row.preview or "").strip(),
                 }
             )
 
@@ -1223,10 +1123,10 @@ def recipe_generate(
                 qm = "1" if want_quality else "0"
                 return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={cached.id}", status_code=302)
 
-        r = generate_and_save_recipe(db, user_id, profile_view, want_quality)
+        row = generate_and_save_recipe(db, user_id, profile_view, want_quality)
 
     qm = "1" if want_quality else "0"
-    return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={r.id}", status_code=302)
+    return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={row.id}", status_code=302)
 
 
 @app.get("/ai-prompt", response_class=HTMLResponse)
