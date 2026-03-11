@@ -5,17 +5,43 @@
   <title>Lobos - Preferences</title>
   <style>
     body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    .grid { display: grid; grid-template-columns: 420px ; gap: 18px; align-items: start; }
+    .grid { display: grid; grid-template-columns: 520px; gap: 18px; align-items: start; }
     .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
     h1 { margin: 0 0 12px 0; font-size: 22px; }
     h2 { margin: 0 0 10px 0; font-size: 16px; }
-    label { display:block; margin-top: 10px; font-size: 13px; color: #333; }
-    select, input[type="text"] { width: 100%; padding: 10px; border-radius: 10px; border: 1px solid #ccc; font-size: 14px; }
-    .btn { padding: 11px 14px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; font-size: 14px; display:inline-block; text-decoration:none; }
+    h3 { margin: 14px 0 8px 0; font-size: 14px; }
+    label { display:block; margin-top: 10px; font-size: 13px; color: #333; font-weight: 600; }
+    select, input[type="text"], input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid #ccc;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+    .btn {
+      padding: 11px 14px;
+      border-radius: 10px;
+      border: 1px solid #bbb;
+      cursor: pointer;
+      font-size: 14px;
+      display:inline-block;
+      text-decoration:none;
+      background: white;
+      color: inherit;
+    }
     .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
     .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
+    .btn-secondary { border-color: #444; background: #444; color: white; }
     .muted { color:#666; font-size: 13px; }
-    .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background:#f2f2f2; font-size: 12px; margin-left: 6px; }
+    .pill {
+      display:inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background:#f2f2f2;
+      font-size: 12px;
+      margin-left: 6px;
+    }
     .kv { display:grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 14px; }
     .kv .k { color:#666; }
     .alert-error {
@@ -28,17 +54,88 @@
       font-size: 14px;
       font-weight: 600;
     }
+    .alert-success {
+      margin: 0 0 14px 0;
+      padding: 12px 14px;
+      border: 1px solid #bbf7d0;
+      border-radius: 10px;
+      background: #f0fdf4;
+      color: #166534;
+      font-size: 14px;
+      font-weight: 600;
+      display: none;
+    }
+    .alert-info {
+      margin: 0 0 14px 0;
+      padding: 12px 14px;
+      border: 1px solid #bfdbfe;
+      border-radius: 10px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font-size: 14px;
+      font-weight: 600;
+      display: none;
+    }
+    .section {
+      margin-top: 14px;
+      padding-top: 14px;
+      border-top: 1px solid #eee;
+    }
+    .row-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .checkbox-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px 12px;
+      margin-top: 8px;
+    }
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+    .checkbox-item input {
+      width: auto;
+      margin: 0;
+    }
+    .actions {
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin-top: 16px;
+    }
+    .small-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+    }
+    .loading {
+      color: #666;
+      font-size: 13px;
+      margin-top: 8px;
+    }
+    .hidden {
+      display: none;
+    }
   </style>
 </head>
 <body>
   <h1>Lobos</h1>
 
   <div class="grid">
-    <!-- LEFT -->
     <div class="card">
       {% if membership_required_error %}
         <div class="alert-error">{{ membership_required_error }}</div>
       {% endif %}
+
+      <div id="saveSuccess" class="alert-success">Preferences saved.</div>
+      <div id="saveInfo" class="alert-info">Loading preferences...</div>
+      <div id="saveError" class="alert-error hidden"></div>
 
       <h2>Identity</h2>
 
@@ -50,58 +147,66 @@
       </div>
 
       {% if not membership_required_error %}
-        <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
-
-        <h2>Preferences <span class="pill">v1</span></h2>
-
-        <form method="post" action="/prefs/save">
-          <input type="hidden" name="token" value="{{ token }}" />
-
-          <label>Eating style</label>
-          <select name="eating_style">
-            {% for v in eating_style_options %}
-              <option value="{{ v }}" {% if profile.eating_style == v %}selected{% endif %}>{{ v }}</option>
-            {% endfor %}
-          </select>
-
-          <label>Meal type</label>
-          <select name="meal_type">
-            {% for v in meal_type_options %}
-              <option value="{{ v }}" {% if profile.meal_type == v %}selected{% endif %}>{{ v }}</option>
-            {% endfor %}
-          </select>
-
-          <label>Macro preset</label>
-          <select name="macro_preset">
-            {% for v in macro_preset_options %}
-              <option value="{{ v }}" {% if profile.macro_preset == v %}selected{% endif %}>{{ v }}</option>
-            {% endfor %}
-          </select>
-
-          <label>Preparation</label>
-          <select name="prep">
-            {% for v in prep_options %}
-              <option value="{{ v }}" {% if profile.prep == v %}selected{% endif %}>{{ v }}</option>
-            {% endfor %}
-          </select>
-
-          <div style="margin-top: 12px;">
-            <button class="btn btn-save" type="submit">Save Preferences</button>
+        <div class="section">
+          <h2>Preferences <span class="pill">v2 onboarding</span></h2>
+          <div class="muted">
+            This page now saves through the new preferences API.
           </div>
 
-          <div class="muted" style="margin-top: 8px;">
-            Saved to Postgres. (Later: sync back to WP.)
-          </div>
-        </form>
+          <form id="prefsForm">
+            <div class="row-2">
+              <div>
+                <label for="birth_year">Birth year</label>
+                <input id="birth_year" name="birth_year" type="number" min="1900" max="2100" />
+              </div>
 
-        <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
+              <div>
+                <label for="height_in">Height (inches)</label>
+                <input id="height_in" name="height_in" type="number" min="24" max="96" step="1" />
+              </div>
+            </div>
 
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <a class="btn btn-primary" href="/my-recipe?token={{ token }}">My Recipe</a>
-          {% if is_admin %}
-          <a class="btn" href="/admin?token={{ token }}">Admin</a>
-          {% endif %}
-          <a class="btn" href="/me?token={{ token }}">/me debug</a>
+            <div class="row-2">
+              <div>
+                <label for="current_weight_lb">Current weight (lb)</label>
+                <input id="current_weight_lb" name="current_weight_lb" type="number" min="1" step="0.1" />
+              </div>
+
+              <div>
+                <label for="goal_weight_lb">Goal weight (lb)</label>
+                <input id="goal_weight_lb" name="goal_weight_lb" type="number" min="1" step="0.1" />
+              </div>
+            </div>
+
+            <label for="eating_style">Eating style</label>
+            <select id="eating_style" name="eating_style"></select>
+
+            <label for="glp1_status">GLP-1 status</label>
+            <select id="glp1_status" name="glp1_status"></select>
+
+            <label for="glp1_dosage">GLP-1 dosage</label>
+            <input id="glp1_dosage" name="glp1_dosage" type="text" placeholder="Example: 0.5 mg weekly" />
+
+            <h3>Allergies</h3>
+            <div id="allergyOptions" class="checkbox-list"></div>
+
+            <label for="other_allergy">Other allergy</label>
+            <input id="other_allergy" name="other_allergy" type="text" placeholder="Anything not listed above" />
+
+            <div class="actions">
+              <button class="btn btn-save" type="button" id="saveBtn">Save Preferences</button>
+              <button class="btn btn-primary" type="button" id="completeBtn">Complete Onboarding</button>
+              <a class="btn" href="/my-recipe?token={{ token }}">My Recipe</a>
+              {% if is_admin %}
+              <a class="btn" href="/admin?token={{ token }}">Admin</a>
+              {% endif %}
+              <a class="btn" href="/me?token={{ token }}">/me debug</a>
+            </div>
+
+            <div class="small-note">
+              Save Preferences stores your progress. Complete Onboarding saves and sends you to My Recipe.
+            </div>
+          </form>
         </div>
       {% else %}
         <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
@@ -111,9 +216,387 @@
         </div>
       {% endif %}
     </div>
-
-    <!-- RIGHT (intentionally blank now) -->
-    <div></div>
   </div>
+
+  {% if not membership_required_error %}
+  <script>
+    const TOKEN = {{ token|tojson }};
+
+    function qs(id)
+    {
+      return document.getElementById(id);
+    }
+
+    function showInfo(message)
+    {
+      const el = qs("saveInfo");
+      el.textContent = message;
+      el.style.display = "block";
+    }
+
+    function hideInfo()
+    {
+      qs("saveInfo").style.display = "none";
+    }
+
+    function showSuccess(message)
+    {
+      const el = qs("saveSuccess");
+      el.textContent = message;
+      el.style.display = "block";
+
+      setTimeout(() => {
+        el.style.display = "none";
+      }, 2500);
+    }
+
+    function showError(message)
+    {
+      const el = qs("saveError");
+      el.textContent = message;
+      el.classList.remove("hidden");
+    }
+
+    function hideError()
+    {
+      const el = qs("saveError");
+      el.textContent = "";
+      el.classList.add("hidden");
+    }
+
+    function safeArray(value)
+    {
+      return Array.isArray(value) ? value : [];
+    }
+
+    function safeString(value)
+    {
+      return value == null ? "" : String(value);
+    }
+
+    function setInputValue(id, value)
+    {
+      const el = qs(id);
+      if (!el) return;
+      el.value = value == null ? "" : value;
+    }
+
+    function fillSelect(selectId, values, currentValue, placeholder)
+    {
+      const select = qs(selectId);
+      if (!select) return;
+
+      select.innerHTML = "";
+
+      const normalizedValues = safeArray(values);
+
+      if (placeholder)
+      {
+        const emptyOpt = document.createElement("option");
+        emptyOpt.value = "";
+        emptyOpt.textContent = placeholder;
+        select.appendChild(emptyOpt);
+      }
+
+      for (const raw of normalizedValues)
+      {
+        let value = "";
+        let label = "";
+
+        if (raw != null && typeof raw === "object")
+        {
+          value = safeString(raw.value ?? raw.code ?? raw.label ?? "");
+          label = safeString(raw.label ?? raw.value ?? raw.code ?? "");
+        }
+        else
+        {
+          value = safeString(raw);
+          label = safeString(raw);
+        }
+
+        const opt = document.createElement("option");
+        opt.value = value;
+        opt.textContent = label;
+        if (safeString(currentValue) === value)
+        {
+          opt.selected = true;
+        }
+        select.appendChild(opt);
+      }
+
+      if (safeString(currentValue) && !normalizedValues.some(v => {
+        if (v != null && typeof v === "object")
+        {
+          return safeString(v.value ?? v.code ?? v.label ?? "") === safeString(currentValue);
+        }
+        return safeString(v) === safeString(currentValue);
+      }))
+      {
+        const opt = document.createElement("option");
+        opt.value = safeString(currentValue);
+        opt.textContent = safeString(currentValue);
+        opt.selected = true;
+        select.appendChild(opt);
+      }
+    }
+
+    function extractOptions(optionsData, keys, fallback)
+    {
+      for (const key of keys)
+      {
+        const value = optionsData[key];
+        if (Array.isArray(value))
+        {
+          return value;
+        }
+      }
+      return fallback;
+    }
+
+    function normalizeSelectedAllergies(meData)
+    {
+      const raw =
+        meData.allergy_option_ids ??
+        meData.allergy_ids ??
+        meData.user_allergy_ids ??
+        meData.allergies ??
+        [];
+
+      if (!Array.isArray(raw))
+      {
+        return [];
+      }
+
+      return raw.map(item => {
+        if (item != null && typeof item === "object")
+        {
+          if (item.id != null) return String(item.id);
+          if (item.allergy_option_id != null) return String(item.allergy_option_id);
+          if (item.code != null) return String(item.code);
+          if (item.label != null) return String(item.label);
+        }
+        return String(item);
+      });
+    }
+
+    function renderAllergies(allergyOptions, selectedValues)
+    {
+      const wrap = qs("allergyOptions");
+      wrap.innerHTML = "";
+
+      const selectedSet = new Set(selectedValues.map(v => String(v)));
+
+      for (const raw of safeArray(allergyOptions))
+      {
+        const item = raw && typeof raw === "object" ? raw : { value: raw, label: raw };
+
+        const idValue = String(item.id ?? item.value ?? item.code ?? item.label ?? "");
+        const label = safeString(item.label ?? item.value ?? item.code ?? idValue);
+
+        const labelEl = document.createElement("label");
+        labelEl.className = "checkbox-item";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "allergy_option_ids";
+        checkbox.value = idValue;
+        checkbox.checked = selectedSet.has(idValue) || selectedSet.has(label);
+
+        const span = document.createElement("span");
+        span.textContent = label;
+
+        labelEl.appendChild(checkbox);
+        labelEl.appendChild(span);
+        wrap.appendChild(labelEl);
+      }
+    }
+
+    function getSelectedAllergyIds()
+    {
+      return Array.from(document.querySelectorAll('input[name="allergy_option_ids"]:checked'))
+        .map(el => {
+          const n = Number(el.value);
+          return Number.isNaN(n) ? el.value : n;
+        });
+    }
+
+    function buildPayload()
+    {
+      const payload = {
+        birth_year: emptyToNull(qs("birth_year").value),
+        current_weight_lb: emptyToNull(qs("current_weight_lb").value),
+        goal_weight_lb: emptyToNull(qs("goal_weight_lb").value),
+        height_in: emptyToNull(qs("height_in").value),
+        eating_style: emptyToNull(qs("eating_style").value),
+        glp1_status: emptyToNull(qs("glp1_status").value),
+        glp1_dosage: emptyToNull(qs("glp1_dosage").value),
+        other_allergy: emptyToNull(qs("other_allergy").value),
+        allergy_option_ids: getSelectedAllergyIds()
+      };
+
+      return payload;
+    }
+
+    function emptyToNull(value)
+    {
+      if (value == null) return null;
+      const text = String(value).trim();
+      return text === "" ? null : text;
+    }
+
+    async function apiGet(url)
+    {
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "same-origin",
+        headers: {
+          "Accept": "application/json"
+        }
+      });
+
+      if (!response.ok)
+      {
+        const text = await response.text();
+        throw new Error(text || ("GET failed: " + response.status));
+      }
+
+      return response.json();
+    }
+
+    async function apiPost(url, payload)
+    {
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: payload == null ? null : JSON.stringify(payload)
+      });
+
+      if (!response.ok)
+      {
+        const text = await response.text();
+        throw new Error(text || ("POST failed: " + response.status));
+      }
+
+      const text = await response.text();
+      if (!text)
+      {
+        return {};
+      }
+
+      try
+      {
+        return JSON.parse(text);
+      }
+      catch
+      {
+        return {};
+      }
+    }
+
+    async function loadPageData()
+    {
+      hideError();
+      showInfo("Loading preferences...");
+
+      try
+      {
+        const [optionsData, meData] = await Promise.all([
+          apiGet(`/api/preferences/options?token=${encodeURIComponent(TOKEN)}`),
+          apiGet(`/api/preferences/me?token=${encodeURIComponent(TOKEN)}`)
+        ]);
+
+        const eatingStyleOptions = extractOptions(
+          optionsData,
+          ["eating_style", "eating_style_options"],
+          []
+        );
+
+        const glp1StatusOptions = extractOptions(
+          optionsData,
+          ["glp1_status", "glp1_status_options"],
+          ["Not taking GLP-1", "Currently taking GLP-1", "Prefer not to say"]
+        );
+
+        const allergyOptions = extractOptions(
+          optionsData,
+          ["allergies", "allergy_options"],
+          []
+        );
+
+        setInputValue("birth_year", meData.birth_year);
+        setInputValue("current_weight_lb", meData.current_weight_lb);
+        setInputValue("goal_weight_lb", meData.goal_weight_lb);
+        setInputValue("height_in", meData.height_in);
+        setInputValue("glp1_dosage", meData.glp1_dosage);
+        setInputValue("other_allergy", meData.other_allergy);
+
+        fillSelect("eating_style", eatingStyleOptions, meData.eating_style, "Select eating style");
+        fillSelect("glp1_status", glp1StatusOptions, meData.glp1_status, "Select GLP-1 status");
+
+        const selectedAllergies = normalizeSelectedAllergies(meData);
+        renderAllergies(allergyOptions, selectedAllergies);
+
+        hideInfo();
+
+        if (meData.onboarding_completed)
+        {
+          showSuccess("Onboarding already completed. You can still update your preferences.");
+        }
+      }
+      catch (err)
+      {
+        hideInfo();
+        showError("Failed to load preferences: " + (err && err.message ? err.message : err));
+      }
+    }
+
+    async function savePreferences()
+    {
+      hideError();
+      showInfo("Saving preferences...");
+
+      try
+      {
+        const payload = buildPayload();
+        await apiPost(`/api/preferences/me?token=${encodeURIComponent(TOKEN)}`, payload);
+        hideInfo();
+        showSuccess("Preferences saved.");
+      }
+      catch (err)
+      {
+        hideInfo();
+        showError("Failed to save preferences: " + (err && err.message ? err.message : err));
+      }
+    }
+
+    async function completeOnboarding()
+    {
+      hideError();
+      showInfo("Saving and completing onboarding...");
+
+      try
+      {
+        const payload = buildPayload();
+        await apiPost(`/api/preferences/me?token=${encodeURIComponent(TOKEN)}`, payload);
+        await apiPost(`/api/preferences/me/complete?token=${encodeURIComponent(TOKEN)}`, {});
+        window.location.href = `/my-recipe?token=${encodeURIComponent(TOKEN)}`;
+      }
+      catch (err)
+      {
+        hideInfo();
+        showError("Failed to complete onboarding: " + (err && err.message ? err.message : err));
+      }
+    }
+
+    qs("saveBtn").addEventListener("click", savePreferences);
+    qs("completeBtn").addEventListener("click", completeOnboarding);
+
+    loadPageData();
+  </script>
+  {% endif %}
 </body>
 </html>
