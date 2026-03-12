@@ -1,0 +1,265 @@
+==============================
+TABLE LIST
+==============================
+                                             List of relations
+ Schema |        Name         | Type  |   Owner    | Persistence | Access method |    Size    | Description 
+--------+---------------------+-------+------------+-------------+---------------+------------+-------------
+ public | allergy_options     | table | postgres   | permanent   | heap          | 16 kB      | 
+ public | app_options         | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | external_identities | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | lobos_users         | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | preference_options  | table | lobos_user | permanent   | heap          | 8192 bytes | 
+ public | recipe_generations  | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | recipe_results      | table | lobos_user | permanent   | heap          | 240 kB     | 
+ public | user_allergies      | table | postgres   | permanent   | heap          | 8192 bytes | 
+ public | user_preferences    | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | user_profiles       | table | lobos_user | permanent   | heap          | 8192 bytes | 
+ public | user_weight_log     | table | postgres   | permanent   | heap          | 16 kB      | 
+(11 rows)
+
+
+==============================
+TABLE STRUCTURES
+==============================
+
+--------------------------------------
+TABLE: allergy_options
+--------------------------------------
+                                                                  Table "public.allergy_options"
+   Column   |           Type           | Collation | Nullable |                   Default                   | Storage  | Compression | Stats target | Description 
+------------+--------------------------+-----------+----------+---------------------------------------------+----------+-------------+--------------+-------------
+ id         | bigint                   |           | not null | nextval('allergy_options_id_seq'::regclass) | plain    |             |              | 
+ code       | text                     |           | not null |                                             | extended |             |              | 
+ label      | text                     |           | not null |                                             | extended |             |              | 
+ sort_order | integer                  |           | not null | 0                                           | plain    |             |              | 
+ is_active  | boolean                  |           | not null | true                                        | plain    |             |              | 
+ created_at | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
+Indexes:
+    "allergy_options_pkey" PRIMARY KEY, btree (id)
+    "allergy_options_code_key" UNIQUE CONSTRAINT, btree (code)
+Referenced by:
+    TABLE "user_allergies" CONSTRAINT "fk_user_allergies_allergy_option" FOREIGN KEY (allergy_option_id) REFERENCES allergy_options(id) ON DELETE CASCADE
+Access method: heap
+
+
+--------------------------------------
+TABLE: app_options
+--------------------------------------
+                                         Table "public.app_options"
+   Column   |  Type  | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+------------+--------+-----------+----------+---------+----------+-------------+--------------+-------------
+ key        | text   |           | not null |         | extended |             |              | 
+ json       | text   |           | not null |         | extended |             |              | 
+ updated_at | bigint |           | not null |         | plain    |             |              | 
+Indexes:
+    "app_options_pkey" PRIMARY KEY, btree (key)
+Access method: heap
+
+
+--------------------------------------
+TABLE: external_identities
+--------------------------------------
+                                                                     Table "public.external_identities"
+      Column      |           Type           | Collation | Nullable |                     Default                     | Storage  | Compression | Stats target | Description 
+------------------+--------------------------+-----------+----------+-------------------------------------------------+----------+-------------+--------------+-------------
+ id               | bigint                   |           | not null | nextval('external_identities_id_seq'::regclass) | plain    |             |              | 
+ lobos_user_id    | bigint                   |           | not null |                                                 | plain    |             |              | 
+ provider         | text                     |           | not null |                                                 | extended |             |              | 
+ issuer           | text                     |           | not null |                                                 | extended |             |              | 
+ external_user_id | text                     |           | not null |                                                 | extended |             |              | 
+ created_at       | timestamp with time zone |           |          | now()                                           | plain    |             |              | 
+ last_login_at    | timestamp with time zone |           |          |                                                 | plain    |             |              | 
+Indexes:
+    "external_identities_pkey" PRIMARY KEY, btree (id)
+    "external_identities_provider_issuer_external_user_id_key" UNIQUE CONSTRAINT, btree (provider, issuer, external_user_id)
+Foreign-key constraints:
+    "external_identities_lobos_user_id_fkey" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id)
+Access method: heap
+
+
+--------------------------------------
+TABLE: lobos_users
+--------------------------------------
+                                                                  Table "public.lobos_users"
+   Column   |           Type           | Collation | Nullable |                 Default                 | Storage  | Compression | Stats target | Description 
+------------+--------------------------+-----------+----------+-----------------------------------------+----------+-------------+--------------+-------------
+ id         | bigint                   |           | not null | nextval('lobos_users_id_seq'::regclass) | plain    |             |              | 
+ email      | text                     |           |          |                                         | extended |             |              | 
+ first_name | text                     |           |          |                                         | extended |             |              | 
+ last_name  | text                     |           |          |                                         | extended |             |              | 
+ created_at | timestamp with time zone |           |          | now()                                   | plain    |             |              | 
+ updated_at | timestamp with time zone |           |          | now()                                   | plain    |             |              | 
+Indexes:
+    "lobos_users_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "external_identities" CONSTRAINT "external_identities_lobos_user_id_fkey" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id)
+    TABLE "user_allergies" CONSTRAINT "fk_user_allergies_lobos_user" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id) ON DELETE CASCADE
+    TABLE "user_weight_log" CONSTRAINT "fk_user_weight_log_lobos_user" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id) ON DELETE CASCADE
+    TABLE "user_preferences" CONSTRAINT "user_preferences_lobos_user_id_fkey" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id)
+Access method: heap
+
+
+--------------------------------------
+TABLE: preference_options
+--------------------------------------
+                                                                 Table "public.preference_options"
+   Column   |          Type          | Collation | Nullable |                    Default                     | Storage  | Compression | Stats target | Description 
+------------+------------------------+-----------+----------+------------------------------------------------+----------+-------------+--------------+-------------
+ id         | integer                |           | not null | nextval('preference_options_id_seq'::regclass) | plain    |             |              | 
+ category   | character varying(64)  |           | not null |                                                | extended |             |              | 
+ value      | character varying(256) |           | not null |                                                | extended |             |              | 
+ sort_order | integer                |           | not null | 0                                              | plain    |             |              | 
+ is_active  | boolean                |           | not null | true                                           | plain    |             |              | 
+Indexes:
+    "preference_options_pkey" PRIMARY KEY, btree (id)
+    "preference_options_cat_active_sort" btree (category, is_active, sort_order)
+    "preference_options_category_value_key" UNIQUE CONSTRAINT, btree (category, value)
+Access method: heap
+
+
+--------------------------------------
+TABLE: recipe_generations
+--------------------------------------
+                                                                 Table "public.recipe_generations"
+   Column    |          Type          | Collation | Nullable |                    Default                     | Storage  | Compression | Stats target | Description 
+-------------+------------------------+-----------+----------+------------------------------------------------+----------+-------------+--------------+-------------
+ id          | integer                |           | not null | nextval('recipe_generations_id_seq'::regclass) | plain    |             |              | 
+ user_id     | character varying(128) |           | not null |                                                | extended |             |              | 
+ created_at  | bigint                 |           | not null |                                                | plain    |             |              | 
+ model       | character varying(128) |           | not null |                                                | extended |             |              | 
+ prompt_hash | character varying(64)  |           | not null |                                                | extended |             |              | 
+ prompt      | text                   |           | not null |                                                | extended |             |              | 
+ response    | text                   |           | not null |                                                | extended |             |              | 
+Indexes:
+    "recipe_generations_pkey" PRIMARY KEY, btree (id)
+    "idx_recipe_generations_user_time" btree (user_id, created_at DESC)
+Access method: heap
+
+
+--------------------------------------
+TABLE: recipe_results
+--------------------------------------
+                                                                  Table "public.recipe_results"
+    Column     |          Type          | Collation | Nullable |                  Default                   | Storage  | Compression | Stats target | Description 
+---------------+------------------------+-----------+----------+--------------------------------------------+----------+-------------+--------------+-------------
+ id            | integer                |           | not null | nextval('recipe_results_id_seq'::regclass) | plain    |             |              | 
+ user_id       | character varying(128) |           | not null |                                            | extended |             |              | 
+ created_at    | bigint                 |           | not null |                                            | plain    |             |              | 
+ request_hash  | character varying(64)  |           | not null |                                            | extended |             |              | 
+ request_json  | text                   |           | not null |                                            | extended |             |              | 
+ response_text | text                   |           | not null |                                            | extended |             |              | 
+ model         | character varying(128) |           |          |                                            | extended |             |              | 
+ prompt_hash   | character varying(64)  |           |          |                                            | extended |             |              | 
+ title         | character varying(256) |           |          |                                            | extended |             |              | 
+ preview       | text                   |           |          |                                            | extended |             |              | 
+Indexes:
+    "recipe_results_pkey" PRIMARY KEY, btree (id)
+    "recipe_results_user_created" btree (user_id, created_at DESC)
+    "recipe_results_user_req_created_idx" btree (user_id, request_hash, created_at DESC)
+    "recipe_results_user_reqhash_created" btree (user_id, request_hash, created_at DESC)
+    "recipe_results_user_request_created_idx" btree (user_id, request_hash, created_at DESC)
+Access method: heap
+
+
+--------------------------------------
+TABLE: user_allergies
+--------------------------------------
+                                                   Table "public.user_allergies"
+      Column       |           Type           | Collation | Nullable | Default | Storage | Compression | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------+---------+-------------+--------------+-------------
+ lobos_user_id     | bigint                   |           | not null |         | plain   |             |              | 
+ allergy_option_id | bigint                   |           | not null |         | plain   |             |              | 
+ created_at        | timestamp with time zone |           | not null | now()   | plain   |             |              | 
+Indexes:
+    "pk_user_allergies" PRIMARY KEY, btree (lobos_user_id, allergy_option_id)
+    "idx_user_allergies_allergy_option_id" btree (allergy_option_id)
+Foreign-key constraints:
+    "fk_user_allergies_allergy_option" FOREIGN KEY (allergy_option_id) REFERENCES allergy_options(id) ON DELETE CASCADE
+    "fk_user_allergies_lobos_user" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id) ON DELETE CASCADE
+Access method: heap
+
+
+--------------------------------------
+TABLE: user_preferences
+--------------------------------------
+                                                      Table "public.user_preferences"
+         Column          |           Type           | Collation | Nullable | Default | Storage  | Compression | Stats target | Description 
+-------------------------+--------------------------+-----------+----------+---------+----------+-------------+--------------+-------------
+ lobos_user_id           | bigint                   |           | not null |         | plain    |             |              | 
+ current_weight          | numeric(6,2)             |           |          |         | main     |             |              | 
+ goal_weight             | numeric(6,2)             |           |          |         | main     |             |              | 
+ height                  | numeric(6,2)             |           |          |         | main     |             |              | 
+ age                     | integer                  |           |          |         | plain    |             |              | 
+ eating_style            | text                     |           |          |         | extended |             |              | 
+ glp1_status             | text                     |           |          |         | extended |             |              | 
+ glp1_dosage             | text                     |           |          |         | extended |             |              | 
+ onboarding_completed    | boolean                  |           |          | false   | plain    |             |              | 
+ onboarding_completed_at | timestamp with time zone |           |          |         | plain    |             |              | 
+ updated_at              | timestamp with time zone |           |          | now()   | plain    |             |              | 
+ meal_type               | character varying(64)    |           |          |         | extended |             |              | 
+ macro_preset            | character varying(128)   |           |          |         | extended |             |              | 
+ prep                    | character varying(128)   |           |          |         | extended |             |              | 
+ birth_year              | smallint                 |           |          |         | plain    |             |              | 
+ current_weight_lb       | numeric(6,2)             |           |          |         | main     |             |              | 
+ goal_weight_lb          | numeric(6,2)             |           |          |         | main     |             |              | 
+ height_in               | smallint                 |           |          |         | plain    |             |              | 
+ other_allergy           | text                     |           |          |         | extended |             |              | 
+Indexes:
+    "user_preferences_pkey" PRIMARY KEY, btree (lobos_user_id)
+Check constraints:
+    "chk_user_preferences_birth_year" CHECK (birth_year IS NULL OR birth_year >= 1900 AND birth_year <= EXTRACT(year FROM CURRENT_DATE)::integer)
+    "chk_user_preferences_current_weight_lb" CHECK (current_weight_lb IS NULL OR current_weight_lb > 0::numeric)
+    "chk_user_preferences_goal_weight_lb" CHECK (goal_weight_lb IS NULL OR goal_weight_lb > 0::numeric)
+    "chk_user_preferences_height_in" CHECK (height_in IS NULL OR height_in >= 24 AND height_in <= 96)
+Foreign-key constraints:
+    "user_preferences_lobos_user_id_fkey" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id)
+Access method: heap
+
+
+--------------------------------------
+TABLE: user_profiles
+--------------------------------------
+                                                                  Table "public.user_profiles"
+    Column    |          Type          | Collation | Nullable |                  Default                  | Storage  | Compression | Stats target | Description 
+--------------+------------------------+-----------+----------+-------------------------------------------+----------+-------------+--------------+-------------
+ id           | integer                |           | not null | nextval('user_profiles_id_seq'::regclass) | plain    |             |              | 
+ user_id      | character varying(128) |           | not null |                                           | extended |             |              | 
+ created_at   | bigint                 |           | not null |                                           | plain    |             |              | 
+ updated_at   | bigint                 |           | not null |                                           | plain    |             |              | 
+ eating_style | character varying(128) |           | not null |                                           | extended |             |              | 
+ meal_type    | character varying(64)  |           | not null |                                           | extended |             |              | 
+ macro_preset | character varying(128) |           | not null |                                           | extended |             |              | 
+ prep         | character varying(128) |           | not null |                                           | extended |             |              | 
+ email        | character varying(256) |           |          |                                           | extended |             |              | 
+ first_name   | character varying(128) |           |          |                                           | extended |             |              | 
+ last_name    | character varying(128) |           |          |                                           | extended |             |              | 
+ roles        | text                   |           |          |                                           | extended |             |              | 
+ membership   | text                   |           |          |                                           | extended |             |              | 
+Indexes:
+    "user_profiles_pkey" PRIMARY KEY, btree (id)
+    "user_profiles_user_id_key" UNIQUE CONSTRAINT, btree (user_id)
+Access method: heap
+
+
+--------------------------------------
+TABLE: user_weight_log
+--------------------------------------
+                                                                   Table "public.user_weight_log"
+    Column     |           Type           | Collation | Nullable |                   Default                   | Storage  | Compression | Stats target | Description 
+---------------+--------------------------+-----------+----------+---------------------------------------------+----------+-------------+--------------+-------------
+ id            | bigint                   |           | not null | nextval('user_weight_log_id_seq'::regclass) | plain    |             |              | 
+ lobos_user_id | bigint                   |           | not null |                                             | plain    |             |              | 
+ weight_lb     | numeric(6,2)             |           | not null |                                             | main     |             |              | 
+ recorded_at   | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
+ source        | text                     |           | not null | 'user'::text                                | extended |             |              | 
+Indexes:
+    "user_weight_log_pkey" PRIMARY KEY, btree (id)
+    "idx_user_weight_log_lobos_user_id" btree (lobos_user_id)
+    "idx_user_weight_log_recorded_at" btree (recorded_at)
+    "idx_user_weight_log_user_recorded_at" btree (lobos_user_id, recorded_at DESC)
+Check constraints:
+    "chk_user_weight_log_weight_lb" CHECK (weight_lb > 0::numeric)
+Foreign-key constraints:
+    "fk_user_weight_log_lobos_user" FOREIGN KEY (lobos_user_id) REFERENCES lobos_users(id) ON DELETE CASCADE
+Access method: heap
+
