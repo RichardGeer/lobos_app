@@ -1,26 +1,21 @@
-==============================
-TABLE LIST
-==============================
-                                             List of relations
- Schema |        Name         | Type  |   Owner    | Persistence | Access method |    Size    | Description 
---------+---------------------+-------+------------+-------------+---------------+------------+-------------
- public | allergy_options     | table | postgres   | permanent   | heap          | 16 kB      | 
- public | app_options         | table | lobos_user | permanent   | heap          | 16 kB      | 
- public | external_identities | table | lobos_user | permanent   | heap          | 16 kB      | 
- public | lobos_users         | table | lobos_user | permanent   | heap          | 16 kB      | 
- public | preference_options  | table | lobos_user | permanent   | heap          | 8192 bytes | 
- public | recipe_generations  | table | lobos_user | permanent   | heap          | 16 kB      | 
- public | recipe_results      | table | lobos_user | permanent   | heap          | 240 kB     | 
- public | user_allergies      | table | postgres   | permanent   | heap          | 8192 bytes | 
- public | user_preferences    | table | lobos_user | permanent   | heap          | 16 kB      | 
- public | user_profiles       | table | lobos_user | permanent   | heap          | 8192 bytes | 
- public | user_weight_log     | table | postgres   | permanent   | heap          | 16 kB      | 
-(11 rows)
+                                              List of relations
+ Schema |         Name         | Type  |   Owner    | Persistence | Access method |    Size    | Description 
+--------+----------------------+-------+------------+-------------+---------------+------------+-------------
+ public | allergy_options      | table | postgres   | permanent   | heap          | 16 kB      | 
+ public | app_options          | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | external_identities  | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | lobos_users          | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | preference_options   | table | lobos_user | permanent   | heap          | 8192 bytes | 
+ public | recipe_generations   | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | recipe_results       | table | lobos_user | permanent   | heap          | 240 kB     | 
+ public | recipe_variant_queue | table | postgres   | permanent   | heap          | 8192 bytes | 
+ public | recipe_variants      | table | postgres   | permanent   | heap          | 8192 bytes | 
+ public | user_allergies       | table | postgres   | permanent   | heap          | 8192 bytes | 
+ public | user_preferences     | table | lobos_user | permanent   | heap          | 16 kB      | 
+ public | user_profiles        | table | lobos_user | permanent   | heap          | 8192 bytes | 
+ public | user_weight_log      | table | postgres   | permanent   | heap          | 16 kB      | 
+(13 rows)
 
-
-==============================
-TABLE STRUCTURES
-==============================
 
 --------------------------------------
 TABLE: allergy_options
@@ -139,25 +134,99 @@ Access method: heap
 --------------------------------------
 TABLE: recipe_results
 --------------------------------------
-                                                                  Table "public.recipe_results"
-    Column     |          Type          | Collation | Nullable |                  Default                   | Storage  | Compression | Stats target | Description 
----------------+------------------------+-----------+----------+--------------------------------------------+----------+-------------+--------------+-------------
- id            | integer                |           | not null | nextval('recipe_results_id_seq'::regclass) | plain    |             |              | 
- user_id       | character varying(128) |           | not null |                                            | extended |             |              | 
- created_at    | bigint                 |           | not null |                                            | plain    |             |              | 
- request_hash  | character varying(64)  |           | not null |                                            | extended |             |              | 
- request_json  | text                   |           | not null |                                            | extended |             |              | 
- response_text | text                   |           | not null |                                            | extended |             |              | 
- model         | character varying(128) |           |          |                                            | extended |             |              | 
- prompt_hash   | character varying(64)  |           |          |                                            | extended |             |              | 
- title         | character varying(256) |           |          |                                            | extended |             |              | 
- preview       | text                   |           |          |                                            | extended |             |              | 
+                                                                      Table "public.recipe_results"
+        Column        |          Type          | Collation | Nullable |                  Default                   | Storage  | Compression | Stats target | Description 
+----------------------+------------------------+-----------+----------+--------------------------------------------+----------+-------------+--------------+-------------
+ id                   | integer                |           | not null | nextval('recipe_results_id_seq'::regclass) | plain    |             |              | 
+ user_id              | character varying(128) |           | not null |                                            | extended |             |              | 
+ created_at           | bigint                 |           | not null |                                            | plain    |             |              | 
+ request_hash         | character varying(64)  |           | not null |                                            | extended |             |              | 
+ request_json         | text                   |           | not null |                                            | extended |             |              | 
+ response_text        | text                   |           | not null |                                            | extended |             |              | 
+ model                | character varying(128) |           |          |                                            | extended |             |              | 
+ prompt_hash          | character varying(64)  |           |          |                                            | extended |             |              | 
+ title                | character varying(256) |           |          |                                            | extended |             |              | 
+ preview              | text                   |           |          |                                            | extended |             |              | 
+ variant_id           | bigint                 |           |          |                                            | plain    |             |              | 
+ recipe_key           | text                   |           |          |                                            | extended |             |              | 
+ title_norm           | text                   |           |          |                                            | extended |             |              | 
+ body_norm            | text                   |           |          |                                            | extended |             |              | 
+ ingredient_signature | text                   |           |          |                                            | extended |             |              | 
+ distance_score       | numeric(8,6)           |           |          |                                            | main     |             |              | 
+ source_hash          | text                   |           |          |                                            | extended |             |              | 
 Indexes:
     "recipe_results_pkey" PRIMARY KEY, btree (id)
+    "idx_recipe_results_ingredient_signature" btree (ingredient_signature)
+    "idx_recipe_results_source_hash" btree (source_hash)
+    "idx_recipe_results_variant_id" btree (variant_id)
     "recipe_results_user_created" btree (user_id, created_at DESC)
     "recipe_results_user_req_created_idx" btree (user_id, request_hash, created_at DESC)
     "recipe_results_user_reqhash_created" btree (user_id, request_hash, created_at DESC)
     "recipe_results_user_request_created_idx" btree (user_id, request_hash, created_at DESC)
+Foreign-key constraints:
+    "recipe_results_variant_id_fkey" FOREIGN KEY (variant_id) REFERENCES recipe_variants(id)
+Access method: heap
+
+
+--------------------------------------
+TABLE: recipe_variant_queue
+--------------------------------------
+                                                                      Table "public.recipe_variant_queue"
+       Column        |           Type           | Collation | Nullable |                     Default                      | Storage  | Compression | Stats target | Description 
+---------------------+--------------------------+-----------+----------+--------------------------------------------------+----------+-------------+--------------+-------------
+ id                  | bigint                   |           | not null | nextval('recipe_variant_queue_id_seq'::regclass) | plain    |             |              | 
+ variant_id          | bigint                   |           | not null |                                                  | plain    |             |              | 
+ job_type            | text                     |           | not null | 'backfill_recipes'::text                         | extended |             |              | 
+ priority            | integer                  |           | not null | 100                                              | plain    |             |              | 
+ status              | text                     |           | not null | 'queued'::text                                   | extended |             |              | 
+ target_recipe_count | integer                  |           | not null | 20                                               | plain    |             |              | 
+ attempt_count       | integer                  |           | not null | 0                                                | plain    |             |              | 
+ max_attempts        | integer                  |           | not null | 5                                                | plain    |             |              | 
+ locked_by           | text                     |           |          |                                                  | extended |             |              | 
+ locked_at           | timestamp with time zone |           |          |                                                  | plain    |             |              | 
+ available_at        | timestamp with time zone |           | not null | now()                                            | plain    |             |              | 
+ started_at          | timestamp with time zone |           |          |                                                  | plain    |             |              | 
+ finished_at         | timestamp with time zone |           |          |                                                  | plain    |             |              | 
+ last_error          | text                     |           |          |                                                  | extended |             |              | 
+ created_at          | timestamp with time zone |           | not null | now()                                            | plain    |             |              | 
+ updated_at          | timestamp with time zone |           | not null | now()                                            | plain    |             |              | 
+Indexes:
+    "recipe_variant_queue_pkey" PRIMARY KEY, btree (id)
+    "idx_recipe_variant_queue_status_priority" btree (status, priority, available_at, created_at)
+    "idx_recipe_variant_queue_variant_id" btree (variant_id)
+    "uq_recipe_variant_queue_active_job" UNIQUE, btree (variant_id, job_type) WHERE status = ANY (ARRAY['queued'::text, 'running'::text])
+Foreign-key constraints:
+    "recipe_variant_queue_variant_id_fkey" FOREIGN KEY (variant_id) REFERENCES recipe_variants(id) ON DELETE CASCADE
+Access method: heap
+
+
+--------------------------------------
+TABLE: recipe_variants
+--------------------------------------
+                                                                     Table "public.recipe_variants"
+      Column       |           Type           | Collation | Nullable |                   Default                   | Storage  | Compression | Stats target | Description 
+-------------------+--------------------------+-----------+----------+---------------------------------------------+----------+-------------+--------------+-------------
+ id                | bigint                   |           | not null | nextval('recipe_variants_id_seq'::regclass) | plain    |             |              | 
+ variant_key       | text                     |           | not null |                                             | extended |             |              | 
+ variant_version   | integer                  |           | not null | 1                                           | plain    |             |              | 
+ name              | text                     |           |          |                                             | extended |             |              | 
+ source_type       | text                     |           | not null | 'system'::text                              | extended |             |              | 
+ preference_json   | jsonb                    |           | not null |                                             | extended |             |              | 
+ canonical_json    | jsonb                    |           | not null |                                             | extended |             |              | 
+ recipe_count      | integer                  |           | not null | 0                                           | plain    |             |              | 
+ status            | text                     |           | not null | 'active'::text                              | extended |             |              | 
+ created_at        | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
+ updated_at        | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
+ last_generated_at | timestamp with time zone |           |          |                                             | plain    |             |              | 
+Indexes:
+    "recipe_variants_pkey" PRIMARY KEY, btree (id)
+    "idx_recipe_variants_canonical_json_gin" gin (canonical_json)
+    "idx_recipe_variants_status" btree (status)
+    "idx_recipe_variants_updated_at" btree (updated_at)
+    "recipe_variants_variant_key_key" UNIQUE CONSTRAINT, btree (variant_key)
+Referenced by:
+    TABLE "recipe_results" CONSTRAINT "recipe_results_variant_id_fkey" FOREIGN KEY (variant_id) REFERENCES recipe_variants(id)
+    TABLE "recipe_variant_queue" CONSTRAINT "recipe_variant_queue_variant_id_fkey" FOREIGN KEY (variant_id) REFERENCES recipe_variants(id) ON DELETE CASCADE
 Access method: heap
 
 
