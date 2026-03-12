@@ -1,5 +1,72 @@
 # Lobos Project Context
 
+# Recipe Engine Progress Update
+
+Last updated: 2026-03-12
+
+## Completed
+Recipe engine DB migration has been applied successfully.
+
+### New tables added
+- `recipe_variants`
+- `recipe_variant_queue`
+
+### `recipe_results` columns added
+- `variant_id`
+- `recipe_key`
+- `title_norm`
+- `body_norm`
+- `ingredient_signature`
+- `distance_score`
+- `source_hash`
+
+## Current design direction
+
+### recipe_variants
+Stores reusable normalized preference variants so recipes can be cached globally across users, not only per user.
+
+### recipe_variant_queue
+Acts as a Postgres-backed async queue for recipe backfill jobs.  
+Goal: avoid duplicate active jobs for the same variant and support background cache generation.
+
+### recipe dedup
+Dedup will happen before insert.
+
+Planned flow:
+1. generate candidate recipe
+2. normalize title, ingredients, and body
+3. compute `ingredient_signature`
+4. compute `source_hash`
+5. compare against accepted recipes for the same variant
+6. if too similar, log duplicate details and discard
+7. if unique, insert into `recipe_results`
+
+Important:
+- duplicate candidates are not stored in DB
+- duplicate candidates may be logged for debugging
+- this avoids DB bloat while still allowing dedup tuning later
+
+## Next likely work
+1. Python helper functions for variant normalization and hashing
+2. enqueue logic from app request flow
+3. background worker design and implementation
+4. recipe dedup helper logic before insert
+5. decide direct-request behavior when cache is low
+
+## New thread starter
+Project context:
+https://github.com/RichardGeer/lobos_app/blob/main/docs/PROJECT_CONTEXT.md
+
+We already completed the DB migration for:
+- recipe variants
+- variant queue
+- recipe_results dedup-related columns
+
+Next, continue with:
+1. variant key / canonical JSON helpers
+2. queue enqueue logic
+3. worker skeleton
+4. dedup helper functions
 
 # Recipe Engine - Next Design Layer
 
