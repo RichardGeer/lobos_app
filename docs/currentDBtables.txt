@@ -218,6 +218,7 @@ TABLE: recipe_variants
  created_at        | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
  updated_at        | timestamp with time zone |           | not null | now()                                       | plain    |             |              | 
  last_generated_at | timestamp with time zone |           |          |                                             | plain    |             |              | 
+ overlay_json      | jsonb                    |           |          |                                             | extended |             |              | 
 Indexes:
     "recipe_variants_pkey" PRIMARY KEY, btree (id)
     "idx_recipe_variants_canonical_json_gin" gin (canonical_json)

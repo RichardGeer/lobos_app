@@ -1,4 +1,97 @@
 # Lobos Project Context
+## Important Variant Design Rule
+
+To prevent variant explosion, Lobos should separate recipe preferences into:
+
+- core cacheable variant fields
+- user-specific overlay fields
+
+The `variant_key` should be generated only from the normalized core variant fields.
+
+Examples of core fields:
+- eating style
+- meal type
+- major allergies
+- GLP-1 phase
+- macro/calorie bands
+
+Examples of overlay fields:
+- dislikes
+- cuisine preference
+- texture preference
+- appliance preference
+- free-form request text
+
+This allows many users to share the same cached recipe pool while still supporting personalization at request time.
+
+# Recipe Engine Progress Update
+
+Last Updated: 2026-03-12 14:08 PST
+
+## Completed
+
+Recipe engine database migration has been successfully applied.
+
+### New Tables
+
+recipe_variants  
+Stores reusable normalized preference variants so recipes can be cached globally across users.
+
+recipe_variant_queue  
+Database-backed queue used for asynchronous recipe generation and cache backfill.
+
+### recipe_results Extensions
+
+The following columns were added to support dedup and variant mapping:
+
+- variant_id
+- recipe_key
+- title_norm
+- body_norm
+- ingredient_signature
+- distance_score
+- source_hash
+
+Indexes were also added to support fast lookup during dedup checks.
+
+## Dedup Strategy
+
+Recipe deduplication happens **before database insert**.
+
+Workflow:
+
+1. AI generates recipe candidate
+2. title / ingredients / body are normalized
+3. ingredient_signature is computed
+4. source_hash is computed
+5. existing recipes for the same variant are checked
+6. if similarity is too high:
+   - duplicate candidate is logged
+   - candidate is discarded
+7. otherwise recipe is inserted
+
+Duplicate candidates are **not stored in the database** to avoid table bloat.
+
+## Recipe Variant Architecture
+
+recipe_variants defines reusable preference variants so multiple users with similar preferences can share a cached recipe pool.
+
+recipe_variant_queue provides a Postgres-backed job queue so variants can be asynchronously filled with recipes by a background worker.
+
+This architecture allows:
+
+- global recipe caching
+- async recipe generation
+- dedup before insert
+- future support for vector similarity if needed
+
+## Next Development Steps
+
+1. Implement variant canonicalization helpers
+2. Generate variant_key hash from canonical JSON
+3. Add enqueue logic when variant recipe count is low
+4. Implement background worker
+5. Implement dedup helpers before insert
 
 # Recipe Engine Progress Update
 

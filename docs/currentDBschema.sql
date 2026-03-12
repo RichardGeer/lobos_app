@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict TFbY9wmzz5TfDfxp9lSdzBEITMMg0NMEKV8OiJRVZa5fBJtmNJWLljEbsHSLKtN
+\restrict NdKy3Ezi8G4MOCd76YAntF6PtAoKADYGBnNtBAGFqBbN95ekkkQcc8D8uzq2Fzs
 
 -- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
 -- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
@@ -335,7 +335,8 @@ CREATE TABLE public.recipe_variants (
     status text DEFAULT 'active'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_generated_at timestamp with time zone
+    last_generated_at timestamp with time zone,
+    overlay_json jsonb
 );
 
 
@@ -974,5 +975,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,
 -- PostgreSQL database dump complete
 --
 
-\unrestrict TFbY9wmzz5TfDfxp9lSdzBEITMMg0NMEKV8OiJRVZa5fBJtmNJWLljEbsHSLKtN
+\unrestrict NdKy3Ezi8G4MOCd76YAntF6PtAoKADYGBnNtBAGFqBbN95ekkkQcc8D8uzq2Fzs
 
