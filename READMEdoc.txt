@@ -86,11 +86,7 @@ If membership_status == true:
 
 If user does not exist → create new Lobos user record
 
-
 If user exists → load existing profile
-
-
-Email is the unique identifier.
 
 PREFERENCES (editable)
 If new user, fill this out (preferences)…
@@ -133,11 +129,10 @@ Last name
 Current weight <<DARREN - is it better to do ranges as a drop down or make free form?>>
 Goal weight
 Height
-Age
+birthYear
 
 Allergies (required multi check) 
 No allergies (Y/N)
-
 
 Gluten_free (Y/N)
 
@@ -174,7 +169,7 @@ Low-FODMAP - definition limits poorly absorbed carbohydrates that can trigger bl
 UPON OPENING LOBOS (after user has filled in the Preferences section)
 
 User sees 
-Darren, ideally, the user can edit any of these fields, and then the edited information is pushed back into their WordPress account. Is this possible?
+Darren, ideally, the user can edit any of these fields, and then the edited information is pushed back into their WordPress account. Is this possible? this is possible but not recommended.
 
 Hello, <<FIRST NAME HERE>>
 Preferred eating style (see list above if the user wants to edit)
