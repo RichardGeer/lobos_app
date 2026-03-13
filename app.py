@@ -395,6 +395,9 @@ def build_recipe_request_payload_for_user(
 
     payload = {
         "eating_style": None,
+        "meal_type": None,
+        "macro_preset": None,
+        "prep": None,
         "glp1_status": None,
         "glp1_dosage": None,
         "allergy_codes": allergy_codes,
@@ -411,6 +414,9 @@ def build_recipe_request_payload_for_user(
 
     if prefs is not None:
         payload["eating_style"] = prefs.eating_style
+        payload["meal_type"] = prefs.meal_type
+        payload["macro_preset"] = prefs.macro_preset
+        payload["prep"] = prefs.prep
         payload["glp1_status"] = prefs.glp1_status
         payload["glp1_dosage"] = prefs.glp1_dosage
         payload["other_allergy"] = prefs.other_allergy
@@ -425,9 +431,14 @@ def build_recipe_request_payload_for_user(
 
     if not payload["eating_style"]:
         payload["eating_style"] = profile_view.get("eating_style") or "No Preference"
+    if not payload["meal_type"]:
+        payload["meal_type"] = profile_view.get("meal_type") or "Dinner"
+    if not payload["macro_preset"]:
+        payload["macro_preset"] = profile_view.get("macro_preset") or "40/40/20 (Protein-Enhanced Lean)"
+    if not payload["prep"]:
+        payload["prep"] = profile_view.get("prep") or "Standard"
 
     return payload
-
 
 def build_prompt_from_recipe_payload(recipe_payload: Dict[str, Any]) -> str:
     allergy_text = ", ".join(recipe_payload.get("allergy_codes") or [])
@@ -440,6 +451,9 @@ def build_prompt_from_recipe_payload(recipe_payload: Dict[str, Any]) -> str:
 
 User context:
 - Eating style: {recipe_payload.get("eating_style") or "No Preference"}
+- Meal type: {recipe_payload.get("meal_type") or "Not specified"}
+- Macro preset: {recipe_payload.get("macro_preset") or "Not specified"}
+- Preparation: {recipe_payload.get("prep") or "Not specified"}
 - GLP-1 status: {recipe_payload.get("glp1_status") or "Not specified"}
 - GLP-1 dosage: {recipe_payload.get("glp1_dosage") or "Not specified"}
 - Allergies: {allergy_text}
@@ -451,6 +465,7 @@ User context:
 
 Requirements:
 - Avoid all listed allergies and food issues.
+- Match the requested meal type, macro preset, and preparation style when practical.
 - Keep the recipe practical and realistic.
 - Prefer high-protein, moderate-portion, easy-to-tolerate meal ideas suitable for GLP-1 users.
 - Include:
@@ -498,6 +513,9 @@ def call_ollama(model: str, prompt: str) -> str:
 def request_payload_from_profile(profile_view: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "eating_style": profile_view.get("eating_style"),
+        "meal_type": profile_view.get("meal_type"),
+        "macro_preset": profile_view.get("macro_preset"),
+        "prep": profile_view.get("prep"),
         "glp1_status": profile_view.get("glp1_status"),
         "glp1_dosage": profile_view.get("glp1_dosage"),
         "allergy_codes": profile_view.get("allergy_codes") or [],
@@ -507,7 +525,6 @@ def request_payload_from_profile(profile_view: Dict[str, Any]) -> Dict[str, Any]
         "goal_weight_lb": profile_view.get("goal_weight_lb"),
         "height_in": profile_view.get("height_in"),
     }
-
 
 def hash_request(payload: Dict[str, Any]) -> str:
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()
@@ -1206,14 +1223,16 @@ def prefs_save(
 
     return RedirectResponse(url=f"/my-recipe?token={token}", status_code=302)
 
-
-@app.get("/my-recipe", response_class=HTMLResponse)
-def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = None):
+def render_my_recipe_page(
+    request: Request,
+    token: str,
+    quality_mode: bool,
+    rid: Optional[int] = None,
+    recipe_error: str = "",
+):
     user_id = get_user_id_from_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
-
-    quality_mode = (qm == "1")
 
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
@@ -1221,7 +1240,12 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
             return RedirectResponse(url=f"/landing?token={token}", status_code=302)
 
         profile_view = profile_to_view(profile)
-        req_hash = hash_request(request_payload_from_profile(profile_view))
+        req_payload = build_recipe_request_payload_for_user(
+            db=db,
+            user_id=user_id,
+            profile_view=profile_view,
+        )
+        req_hash = hash_request(req_payload)
 
         history = list_recipes_for_request(db, user_id, req_hash, limit=50)
 
@@ -1257,15 +1281,27 @@ def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = 
             "selected_title": selected_title,
             "recipe_text": selected_text,
             "recipe_model_used": selected_model,
-            "recipe_error": "",
+            "recipe_error": recipe_error,
             "history": history_view,
             "cache_age_days": RECIPE_MAX_CACHE_AGE_DAYS,
+            "force_new": False,
         },
     )
 
+@app.get("/my-recipe", response_class=HTMLResponse)
+def my_recipe(request: Request, token: str, qm: str = "0", rid: Optional[int] = None):
+    quality_mode = (qm == "1")
+    return render_my_recipe_page(
+        request=request,
+        token=token,
+        quality_mode=quality_mode,
+        rid=rid,
+        recipe_error="",
+    )
 
 @app.post("/recipe/generate")
 def recipe_generate(
+    request: Request,
     token: str = Form(...),
     quality_mode: Optional[str] = Form(None),
     force_new: Optional[str] = Form(None),
@@ -1283,21 +1319,47 @@ def recipe_generate(
             return RedirectResponse(url=f"/landing?token={token}", status_code=302)
 
         profile_view = profile_to_view(profile)
-        req_hash = hash_request(request_payload_from_profile(profile_view))
+        req_payload = build_recipe_request_payload_for_user(
+            db=db,
+            user_id=user_id,
+            profile_view=profile_view,
+        )
+        req_hash = hash_request(req_payload)
 
         if not force:
             cached = get_cached_recipe(db, user_id, req_hash)
             if cached:
                 qm = "1" if want_quality else "0"
-                return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={cached.id}", status_code=302)
+                return RedirectResponse(
+                    url=f"/my-recipe?token={token}&qm={qm}&rid={cached.id}",
+                    status_code=302,
+                )
 
-        row = generate_and_save_recipe(db, user_id, profile_view, want_quality)
+        try:
+            row = generate_and_save_recipe(db, user_id, profile_view, want_quality)
+        except requests.RequestException as exc:
+            return render_my_recipe_page(
+                request=request,
+                token=token,
+                quality_mode=want_quality,
+                rid=None,
+                recipe_error=f"Recipe generation failed while calling Ollama: {exc}",
+            )
+        except Exception as exc:
+            return render_my_recipe_page(
+                request=request,
+                token=token,
+                quality_mode=want_quality,
+                rid=None,
+                recipe_error=f"Recipe generation failed: {exc}",
+            )
 
     qm = "1" if want_quality else "0"
     return RedirectResponse(url=f"/my-recipe?token={token}&qm={qm}&rid={row.id}", status_code=302)
 
 
 @app.get("/ai-prompt", response_class=HTMLResponse)
+@app.get("/prompt", response_class=HTMLResponse)
 def ai_prompt(token: str):
     user_id = get_user_id_from_token(token)
     if not user_id:
@@ -1308,10 +1370,15 @@ def ai_prompt(token: str):
         if not profile:
             raise HTTPException(status_code=404, detail="Profile not found")
 
-        prompt = build_prompt(profile_to_view(profile))
+        profile_view = profile_to_view(profile)
+        req_payload = build_recipe_request_payload_for_user(
+            db=db,
+            user_id=user_id,
+            profile_view=profile_view,
+        )
+        prompt = build_prompt_from_recipe_payload(req_payload)
 
     return HTMLResponse(f"<pre>{prompt}</pre>")
-
 
 @app.get("/me", response_class=HTMLResponse)
 def me(token: str):

@@ -347,7 +347,7 @@
 
         <div class="link-row">
           {% if not membership_required_error %}
-            <a href="/my_recipe{% if request.url.query %}?{{ request.url.query }}{% endif %}">My Recipe</a>
+            <a href="/my-recipe{% if request.url.query %}?{{ request.url.query }}{% endif %}">My Recipe</a>
           {% endif %}
           {% if is_admin %}
             <a href="/admin{% if request.url.query %}?{{ request.url.query }}{% endif %}">Admin</a>
@@ -426,6 +426,27 @@
                 </div>
 
                 <div>
+                  <label for="meal_type">Meal type</label>
+                  <select id="meal_type" name="meal_type">
+                    <option value="">Select...</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="macro_preset">Macro preset</label>
+                  <select id="macro_preset" name="macro_preset">
+                    <option value="">Select...</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label for="prep">Preparation</label>
+                  <select id="prep" name="prep">
+                    <option value="">Select...</option>
+                  </select>
+                </div>
+
+                <div>
                   <label for="glp1_status">GLP-1 status</label>
                   <select id="glp1_status" name="glp1_status">
                     <option value="">Select...</option>
@@ -440,21 +461,21 @@
               </div>
 
               <div class="inline-note">
-                The goal here is to collect enough structured input to start recipe generation now, before adding more advanced knobs later.
+                The goal here is to collect enough structured input to start recipe generation now, while preserving the knobs your earlier My Recipe flow already used.
               </div>
             </div>
+
+            <div id="status" class="status-bar"></div>
+
+            <div class="actions">
+              <button id="save_btn" class="btn-secondary" type="button">Save Preferences</button>
+              <button id="complete_btn" class="btn-primary" type="button">Complete Onboarding</button>
+            </div>
+
+            <div class="inline-note">
+              Save Preferences stores your progress. Complete Onboarding saves your current values, marks onboarding complete, and opens My Recipe.
+            </div>
           </div>
-        </div>
-
-        <div id="status" class="status-bar"></div>
-
-        <div class="actions">
-          <button id="save_btn" class="btn-secondary" type="button">Save Preferences</button>
-          <button id="complete_btn" class="btn-primary" type="button">Complete Onboarding</button>
-        </div>
-
-        <div class="inline-note">
-          Save Preferences stores your progress. Complete Onboarding saves your current values, marks onboarding complete, and opens My Recipe.
         </div>
       </div>
       {% endif %}
@@ -613,6 +634,9 @@
         allergy_codes: getSelectedAllergyCodes(),
         other_allergy: emptyToNull(qs("other_allergy").value),
         eating_style: emptyToNull(qs("eating_style").value),
+        meal_type: emptyToNull(qs("meal_type").value),
+        macro_preset: emptyToNull(qs("macro_preset").value),
+        prep: emptyToNull(qs("prep").value),
         glp1_status: emptyToNull(qs("glp1_status").value),
         glp1_dosage: emptyToNull(qs("glp1_dosage").value)
       };
@@ -639,7 +663,7 @@
     {
       await savePreferences(false);
       await apiPost("/api/preferences/me/complete", {});
-      window.location.href = "/my_recipe" + window.location.search;
+      window.location.href = "/my-recipe" + window.location.search;
     }
 
     async function loadPageData()
@@ -650,6 +674,9 @@
       ]);
 
       setSelectOptions("eating_style", optionsData.eating_style_options, meData.eating_style);
+      setSelectOptions("meal_type", optionsData.meal_type_options, meData.meal_type);
+      setSelectOptions("macro_preset", optionsData.macro_preset_options, meData.macro_preset);
+      setSelectOptions("prep", optionsData.prep_options, meData.prep);
       setSelectOptions("glp1_status", optionsData.glp1_status_options, meData.glp1_status);
       renderAllergies(optionsData.allergies, meData.allergy_codes);
 

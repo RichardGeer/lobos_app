@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from db import get_db
 from models import AllergyOption
 from models import ExternalIdentity
+from models import PreferenceOption
 from models import UserAllergy
 from models import UserPreference
 from models import UserWeightLog
@@ -41,6 +42,9 @@ class PreferenceOptionOut(BaseModel):
 class PreferencesOptionsResponse(BaseModel):
     allergies: list[PreferenceOptionOut]
     eating_style_options: list[str]
+    meal_type_options: list[str]
+    macro_preset_options: list[str]
+    prep_options: list[str]
     glp1_status_options: list[str]
 
 
@@ -55,6 +59,9 @@ class PreferencesMeResponse(BaseModel):
     allergy_codes: list[str] = []
     other_allergy: Optional[str] = None
     eating_style: Optional[str] = None
+    meal_type: Optional[str] = None
+    macro_preset: Optional[str] = None
+    prep: Optional[str] = None
     glp1_status: Optional[str] = None
     glp1_dosage: Optional[str] = None
 
@@ -72,6 +79,9 @@ class PreferencesSaveRequest(BaseModel):
     allergy_codes: list[str] = Field(default_factory=list)
     other_allergy: Optional[str] = Field(default=None, max_length=1000)
     eating_style: Optional[str] = Field(default=None, max_length=200)
+    meal_type: Optional[str] = Field(default=None, max_length=64)
+    macro_preset: Optional[str] = Field(default=None, max_length=128)
+    prep: Optional[str] = Field(default=None, max_length=128)
     glp1_status: Optional[str] = Field(default=None, max_length=200)
     glp1_dosage: Optional[str] = Field(default=None, max_length=200)
 
@@ -192,6 +202,18 @@ def ensure_user_preferences_row(db: Session, lobos_user_id: int) -> UserPreferen
     return prefs
 
 
+def load_option_values(db: Session, category: str, fallback: list[str]) -> list[str]:
+    stmt = (
+        select(PreferenceOption.value)
+        .where(PreferenceOption.category == category)
+        .where(PreferenceOption.is_active.is_(True))
+        .order_by(PreferenceOption.sort_order.asc(), PreferenceOption.value.asc())
+    )
+
+    values = [str(value).strip() for value in db.execute(stmt).scalars().all() if str(value).strip()]
+    return values or fallback
+
+
 def serialize_preferences(db: Session, prefs: UserPreference, lobos_user_id: int) -> PreferencesMeResponse:
     allergy_stmt = (
         select(AllergyOption.code)
@@ -214,6 +236,9 @@ def serialize_preferences(db: Session, prefs: UserPreference, lobos_user_id: int
         allergy_codes=allergy_codes,
         other_allergy=prefs.other_allergy,
         eating_style=prefs.eating_style,
+        meal_type=prefs.meal_type,
+        macro_preset=prefs.macro_preset,
+        prep=prefs.prep,
         glp1_status=prefs.glp1_status,
         glp1_dosage=prefs.glp1_dosage,
     )
@@ -246,20 +271,39 @@ def get_preferences_options(
 
     return PreferencesOptionsResponse(
         allergies=allergies,
-        eating_style_options=[
-            "No Preference",
-            "Keto",
-            "Paleo",
-            "Mediterranean",
-            "Green Mediterranean",
-            "Whole Food Plant-Based (WFPB)",
-            "Vegetarian",
-            "Flexitarian",
-            "Pegan",
-            "Whole30",
-            "Vegan",
-            "Low-FODMAP",
-        ],
+        eating_style_options=load_option_values(
+            db,
+            "eating_style",
+            [
+                "No Preference",
+                "Keto",
+                "Paleo",
+                "Mediterranean",
+                "Green Mediterranean",
+                "Whole Food Plant-Based (WFPB)",
+                "Vegetarian",
+                "Flexitarian",
+                "Pegan",
+                "Whole30",
+                "Vegan",
+                "Low-FODMAP",
+            ],
+        ),
+        meal_type_options=load_option_values(
+            db,
+            "meal_type",
+            ["Breakfast", "Lunch", "Dinner", "Snack", "Dessert"],
+        ),
+        macro_preset_options=load_option_values(
+            db,
+            "macro_preset",
+            ["40/40/20 (Protein-Enhanced Lean)"],
+        ),
+        prep_options=load_option_values(
+            db,
+            "prep",
+            ["5-Ingredient", "Standard"],
+        ),
         glp1_status_options=[
             "not_taking",
             "thinking_about_it",
@@ -308,6 +352,9 @@ def save_my_preferences(
     prefs.height_in = resolved_height_in
     prefs.other_allergy = payload.other_allergy.strip() if payload.other_allergy else None
     prefs.eating_style = payload.eating_style
+    prefs.meal_type = payload.meal_type
+    prefs.macro_preset = payload.macro_preset
+    prefs.prep = payload.prep
     prefs.glp1_status = payload.glp1_status
     prefs.glp1_dosage = payload.glp1_dosage
     prefs.updated_at = datetime.now(timezone.utc)

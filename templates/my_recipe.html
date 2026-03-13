@@ -326,7 +326,7 @@
 
       <div class="nav">
         <a href="/landing{% if request.url.query %}?{{ request.url.query }}{% endif %}">Back to Preferences</a>
-        <a href="/prompt{% if request.url.query %}?{{ request.url.query }}{% endif %}">AI prompt</a>
+        <a href="/ai-prompt{% if request.url.query %}?{{ request.url.query }}{% endif %}">AI prompt</a>
         <a href="/me{% if request.url.query %}?{{ request.url.query }}{% endif %}">/me debug</a>
       </div>
     </div>
@@ -345,6 +345,27 @@
             <div>
               <label for="eating_style">Eating style</label>
               <select id="eating_style" name="eating_style">
+                <option value="">Select...</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="meal_type">Meal type</label>
+              <select id="meal_type" name="meal_type">
+                <option value="">Select...</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="macro_preset">Macro preset</label>
+              <select id="macro_preset" name="macro_preset">
+                <option value="">Select...</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="prep">Preparation</label>
+              <select id="prep" name="prep">
                 <option value="">Select...</option>
               </select>
             </div>
@@ -386,10 +407,12 @@
       <div class="card">
         <h2>Recipe generation</h2>
         <p class="subtle">
-          Generate now using your currently saved preference profile. A later `app.py` pass can make the generator read these fields more deeply.
+          Generate now using your currently saved preference profile.
         </p>
 
-        <form method="post" action="">
+        <form method="post" action="/recipe/generate">
+          <input type="hidden" name="token" value="{{ token }}" />
+
           <div class="row">
             <label class="inline">
               <input type="checkbox" name="quality_mode" value="1" {% if quality_mode %}checked{% endif %} />
@@ -430,7 +453,7 @@
                 {% set is_active = (selected_recipe_id == r.id) %}
                 <a
                   class="history-chip {% if is_active %}active{% endif %}"
-                  href="?selected_recipe_id={{ r.id }}{% if request.url.query %}&{{ request.url.query }}{% endif %}"
+                  href="/my-recipe?token={{ token }}&qm={% if quality_mode %}1{% else %}0{% endif %}&rid={{ r.id }}"
                 >
                   {{ r.title if r.title else ('#' ~ r.id) }} · {{ r.model }} · {{ r.created_at }}
                 </a>
@@ -443,6 +466,10 @@
 
         <div class="section">
           <h3>Selected recipe</h3>
+
+          {% if selected_title %}
+            <div class="small-note" style="margin-bottom: 12px; font-weight: 700;">{{ selected_title }}</div>
+          {% endif %}
 
           {% if recipe_text %}
             {% if recipe_model_used %}
@@ -580,6 +607,9 @@
         allergy_codes: getSelectedAllergyCodes(),
         other_allergy: emptyToNull(qs("other_allergy").value),
         eating_style: emptyToNull(qs("eating_style").value),
+        meal_type: emptyToNull(qs("meal_type").value),
+        macro_preset: emptyToNull(qs("macro_preset").value),
+        prep: emptyToNull(qs("prep").value),
         glp1_status: emptyToNull(qs("glp1_status").value),
         glp1_dosage: emptyToNull(qs("glp1_dosage").value)
       };
@@ -600,6 +630,9 @@
       ]);
 
       setSelectOptions("eating_style", optionsData.eating_style_options, meData.eating_style);
+      setSelectOptions("meal_type", optionsData.meal_type_options, meData.meal_type);
+      setSelectOptions("macro_preset", optionsData.macro_preset_options, meData.macro_preset);
+      setSelectOptions("prep", optionsData.prep_options, meData.prep);
       setSelectOptions("glp1_status", optionsData.glp1_status_options, meData.glp1_status);
       renderAllergies(optionsData.allergies, meData.allergy_codes);
       setValue("other_allergy", meData.other_allergy);
