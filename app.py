@@ -53,7 +53,7 @@ from recipe_service import FAST_MODEL
 from recipe_service import QUALITY_MODEL
 from recipe_service import build_recipe_request_payload_for_user
 from recipe_service import generate_and_save_recipe
-from recipe_service import get_cached_recipe
+from recipe_service import get_or_clone_shared_recipe
 from recipe_service import get_recipe_by_id
 from recipe_service import hash_request
 from recipe_service import list_recipes_for_request
@@ -428,7 +428,14 @@ def generate_recipe(
         )
         request_hash = hash_request(request_payload)
 
-        cached = get_cached_recipe(db, user_id, request_hash)
+         
+        cached = get_or_clone_shared_recipe(
+            db=db,
+            user_id=user_id,
+            request_payload=request_payload,
+        )
+
+
         if cached is not None:
             logger.info("recipe_cache_hit user=%s recipe_id=%s", user_id, cached.id)
             return RedirectResponse(url=f"/recipe/{cached.id}?token={token}", status_code=302)
