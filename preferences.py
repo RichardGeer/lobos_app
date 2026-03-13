@@ -238,6 +238,7 @@ def get_preferences_options(
         .where(AllergyOption.is_active.is_(True))
         .order_by(AllergyOption.sort_order.asc(), AllergyOption.id.asc())
     )
+
     rows = db.execute(stmt).scalars().all()
 
     allergies = [
@@ -253,12 +254,18 @@ def get_preferences_options(
     return PreferencesOptionsResponse(
         allergies=allergies,
         eating_style_options=[
-            "High Protein",
-            "Low Carb",
             "No Preference",
+            "Keto",
+            "Paleo",
+            "Mediterranean",
+            "Green Mediterranean",
+            "Whole Food Plant-Based (WFPB)",
             "Vegetarian",
+            "Flexitarian",
+            "Pegan",
+            "Whole30",
             "Vegan",
-            "Pescatarian",
+            "Low-FODMAP",
         ],
         glp1_status_options=[
             "not_taking",
@@ -269,7 +276,6 @@ def get_preferences_options(
             "stopped",
         ],
     )
-
 
 @router.get("/me", response_model=PreferencesMeResponse)
 def get_my_preferences(
