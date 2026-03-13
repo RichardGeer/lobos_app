@@ -21,6 +21,8 @@ from fastapi.responses import HTMLResponse
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from sqlalchemy import select
+
 from db import Base
 from db import SessionLocal
 from db import engine
@@ -345,26 +347,6 @@ def get_lobos_user_id_from_external_user_id(
 
     return int(row.lobos_user_id)
 
-
-def get_allergy_codes_for_lobos_user(db, lobos_user_id: int) -> List[str]:
-    stmt = (
-        select(ExternalIdentity)  # placeholder to keep SQLAlchemy import used consistently elsewhere if needed
-    )
-    del stmt
-
-    rows = db.execute(
-        select(
-            __import__("models").AllergyOption.code
-        )
-        .join(
-            __import__("models").UserAllergy,
-            __import__("models").UserAllergy.allergy_option_id == __import__("models").AllergyOption.id,
-        )
-        .where(__import__("models").UserAllergy.lobos_user_id == lobos_user_id)
-        .order_by(__import__("models").AllergyOption.sort_order.asc(), __import__("models").AllergyOption.id.asc())
-    ).scalars().all()
-
-    return list(rows)
 
 def get_allergy_codes_for_lobos_user(db, lobos_user_id: int) -> List[str]:
     from models import AllergyOption, UserAllergy
