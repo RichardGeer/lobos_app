@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Lobos Demo SSO
  * Description: Lobos Demo SSO plugin with button shortcode, debug shortcode, JWT redirect, MemberPress membership detection, and admin settings.
- * Version: 0.7
+ * Version: 0.8
  * Author: Paul
  */
 
@@ -11,11 +11,11 @@ if (!defined('ABSPATH'))
     exit;
 }
 
-if (!class_exists('Lobos_Demo_SSOPlugin'))
+if (!class_exists('Lobos_Demo_SSO_Plugin'))
 {
     class Lobos_Demo_SSO_Plugin
     {
-        const OPTION_KEY = 'lobos_dev_sso_options';
+        const OPTION_KEY = 'lobos_demo_sso_options';
 
         const DEFAULT_URL = 'http://my.lobos.com:8000/login';
         const DEFAULT_SECRET = '5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT';
@@ -29,17 +29,17 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
 
             add_shortcode('lobos_demo_button', array($this, 'shortcode_button'));
             add_shortcode('lobos_demo_debug', array($this, 'shortcode_debug'));
-    
+
             add_action('init', array($this, 'maybe_handle_actions'));
         }
 
         public function admin_menu()
         {
             add_options_page(
-                'Lobos Dev SSO',
-                'Lobos Dev SSO',
+                'Lobos Demo SSO',
+                'Lobos Demo SSO',
                 'manage_options',
-                'lobos-dev-sso',
+                'lobos-demo-sso',
                 array($this, 'settings_page')
             );
         }
@@ -47,7 +47,7 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
         public function admin_init()
         {
             register_setting(
-                'lobos_dev_sso_group',
+                'lobos_demo_sso_group',
                 self::OPTION_KEY,
                 array($this, 'sanitize_options')
             );
@@ -95,18 +95,18 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
             $options = $this->get_options();
             ?>
             <div class="wrap">
-                <h1>Lobos Dev SSO Settings</h1>
+                <h1>Lobos Demo SSO Settings</h1>
 
                 <form method="post" action="options.php">
-                    <?php settings_fields('lobos_dev_sso_group'); ?>
+                    <?php settings_fields('lobos_demo_sso_group'); ?>
 
                     <table class="form-table" role="presentation">
                         <tr>
-                            <th scope="row"><label for="lobos_dev_target_url">Target URL</label></th>
+                            <th scope="row"><label for="lobos_demo_target_url">Target URL</label></th>
                             <td>
                                 <input
                                     type="url"
-                                    id="lobos_dev_target_url"
+                                    id="lobos_demo_target_url"
                                     name="<?php echo esc_attr(self::OPTION_KEY); ?>[target_url]"
                                     value="<?php echo esc_attr($options['target_url']); ?>"
                                     class="regular-text"
@@ -115,11 +115,11 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
                         </tr>
 
                         <tr>
-                            <th scope="row"><label for="lobos_dev_secret">JWT Secret</label></th>
+                            <th scope="row"><label for="lobos_demo_secret">JWT Secret</label></th>
                             <td>
                                 <input
                                     type="text"
-                                    id="lobos_dev_secret"
+                                    id="lobos_demo_secret"
                                     name="<?php echo esc_attr(self::OPTION_KEY); ?>[secret]"
                                     value="<?php echo esc_attr($options['secret']); ?>"
                                     class="regular-text"
@@ -128,11 +128,11 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
                         </tr>
 
                         <tr>
-                            <th scope="row"><label for="lobos_dev_issuer">Issuer</label></th>
+                            <th scope="row"><label for="lobos_demo_issuer">Issuer</label></th>
                             <td>
                                 <input
                                     type="text"
-                                    id="lobos_dev_issuer"
+                                    id="lobos_demo_issuer"
                                     name="<?php echo esc_attr(self::OPTION_KEY); ?>[issuer]"
                                     value="<?php echo esc_attr($options['issuer']); ?>"
                                     class="regular-text"
@@ -166,16 +166,16 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
         {
             if (!is_user_logged_in())
             {
-                return '<p>You must be logged in to access Lobos Dev.</p>';
+                return '<p>You must be logged in to access Lobos Demo.</p>';
             }
 
-            $action_url = add_query_arg(array('lobos_dev_action' => 'go'), home_url('/'));
+            $action_url = add_query_arg(array('lobos_demo_action' => 'go'), home_url('/'));
 
             ob_start();
             ?>
             <form method="post" action="<?php echo esc_url($action_url); ?>">
-                <?php wp_nonce_field('lobos_dev_go', 'lobos_dev_nonce'); ?>
-                <button type="submit">Open Lobos Dev</button>
+                <?php wp_nonce_field('lobos_demo_go', 'lobos_demo_nonce'); ?>
+                <button type="submit">Open Lobos Demo</button>
             </form>
             <?php
             return ob_get_clean();
@@ -185,21 +185,21 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
         {
             if (!is_user_logged_in())
             {
-                return '<p>You must be logged in to view Lobos Dev Debug.</p>';
+                return '<p>You must be logged in to view Lobos Demo Debug.</p>';
             }
 
             if (!current_user_can('manage_options'))
             {
-                return '<p>Lobos Dev Debug is currently admin only.</p>';
+                return '<p>Lobos Demo Debug is currently admin only.</p>';
             }
 
-            $action_url = add_query_arg(array('lobos_dev_action' => 'debug'), home_url('/'));
+            $action_url = add_query_arg(array('lobos_demo_action' => 'debug'), home_url('/'));
 
             ob_start();
             ?>
             <form method="post" action="<?php echo esc_url($action_url); ?>">
-                <?php wp_nonce_field('lobos_dev_debug', 'lobos_dev_nonce'); ?>
-                <button type="submit">Lobos Dev Debug</button>
+                <?php wp_nonce_field('lobos_demo_debug', 'lobos_demo_nonce'); ?>
+                <button type="submit">Lobos Demo Debug</button>
             </form>
             <?php
             return ob_get_clean();
@@ -207,12 +207,12 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
 
         public function maybe_handle_actions()
         {
-            if (empty($_GET['lobos_dev_action']))
+            if (empty($_GET['lobos_demo_action']))
             {
                 return;
             }
 
-            $action = sanitize_text_field(wp_unslash($_GET['lobos_dev_action']));
+            $action = sanitize_text_field(wp_unslash($_GET['lobos_demo_action']));
 
             if ($action !== 'go' && $action !== 'debug')
             {
@@ -229,19 +229,19 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
                 wp_die('You must be logged in.');
             }
 
-            if (empty($_POST['lobos_dev_nonce']))
+            if (empty($_POST['lobos_demo_nonce']))
             {
                 wp_die('Missing nonce.');
             }
 
-            $nonce = sanitize_text_field(wp_unslash($_POST['lobos_dev_nonce']));
+            $nonce = sanitize_text_field(wp_unslash($_POST['lobos_demo_nonce']));
 
-            if ($action === 'go' && !wp_verify_nonce($nonce, 'lobos_dev_go'))
+            if ($action === 'go' && !wp_verify_nonce($nonce, 'lobos_demo_go'))
             {
                 wp_die('Invalid nonce.');
             }
 
-            if ($action === 'debug' && !wp_verify_nonce($nonce, 'lobos_dev_debug'))
+            if ($action === 'debug' && !wp_verify_nonce($nonce, 'lobos_demo_debug'))
             {
                 wp_die('Invalid nonce.');
             }
@@ -270,12 +270,12 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
 
             if (empty($target_url))
             {
-                wp_die('Lobos Dev target URL is not configured.');
+                wp_die('Lobos Demo target URL is not configured.');
             }
 
             if (empty($secret) || $secret === 'REPLACE_ME')
             {
-                wp_die('Lobos Dev plugin secret is not configured yet.');
+                wp_die('Lobos Demo plugin secret is not configured yet.');
             }
 
             $user = wp_get_current_user();
@@ -283,7 +283,7 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
 
             if ($require_membership && empty($membership_info['exists']))
             {
-                wp_die('Active membership required to access Lobos Dev.');
+                wp_die('Active membership required to access Lobos Demo.');
             }
 
             $payload = $this->build_jwt_payload($user, $membership_info, $options);
@@ -309,7 +309,7 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
             <html>
             <head>
                 <meta charset="utf-8">
-                <title>Lobos Dev Debug</title>
+                <title>Lobos Demo Debug</title>
                 <style>
                     body { font-family: Arial, sans-serif; margin: 30px; line-height: 1.5; }
                     pre { background: #f4f4f4; padding: 12px; overflow: auto; }
@@ -318,7 +318,7 @@ if (!class_exists('Lobos_Demo_SSOPlugin'))
                 </style>
             </head>
             <body>
-                <h1>Lobos Dev Debug</h1>
+                <h1>Lobos Demo Debug</h1>
 
                 <p><strong>User ID:</strong> <?php echo esc_html($user->ID); ?></p>
                 <p><strong>Email:</strong> <?php echo esc_html($user->user_email); ?></p>

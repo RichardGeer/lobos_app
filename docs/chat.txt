@@ -1,0 +1,22 @@
+i have this plugins for wordpress in a page /lobos
+https://github.com/RichardGeer/lobos_app/blob/main/wp-content/plugins/lobos/lobos/lobos.php
+i hand it over to Darren to do his demo
+i replicated that to 
+https://github.com/RichardGeer/lobos_app/blob/main/wp-content/plugins/lobos-demo/lobos-demo/lobos-demo.php
+and created a page /lobos-demo
+with [lobos_demo_button] and [lobos_demo_debug]
+
+and changed the 
+   add_shortcode('lobos_demo_button', array($this, 'shortcode_button'));
+            add_shortcode('lobos_demo_debug', array($this, 'shortcode_debug'));
+    and a few other _dev to _demo, for some reason 
+    hoping this will go to my page defined 
+    const DEFAULT_URL = 'http://my.lobos.com:8000/login';
+    without affecting 
+     const DEFAULT_URL = 'http://lobos.foodinformed.com:8000/login'; defined in /lobos
+
+but /lobos
+[lobos_dev_button]
+[lobos_dev_debug]
+will still go to http://my.lobos.com:8000/login, 
+can you check for me to see what i am missing?
