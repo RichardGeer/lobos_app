@@ -17,40 +17,25 @@ from db import Base
 from db import SessionLocal
 from db import engine
 from models import PreferenceOption
-from models import RecipeResult
-from models import UserPreference
 from models import UserProfile
 from preferences import router as preferences_router
 
-try:
-    from auth_service import ensure_lobos_user_and_identity
-    from auth_service import ensure_user_preferences_row
-    from auth_service import get_user_id_from_token
-    from auth_service import has_required_membership
-    from auth_service import is_admin_token
-    from auth_service import is_onboarding_complete
-    from auth_service import normalize_text
-    from auth_service import profile_to_view
-    from auth_service import roles_to_human
-    from auth_service import token_identity_from_jwt
-    from auth_service import upsert_user_profile_from_identity
-    from auth_service import verify_and_get_payload
-except ImportError:
-    from auth_service import ensure_lobos_user_and_identity
-    from auth_service import ensure_user_preferences_row
-    from auth_service import get_user_id_from_token
-    from auth_service import has_required_membership
-    from auth_service import is_admin_token
-    from auth_service import is_onboarding_complete
-    from auth_service import normalize_text
-    from auth_service import profile_to_view
-    from auth_service import roles_to_human
-    from auth_service import token_identity_from_jwt
-    from auth_service import upsert_user_profile_from_identity
-    from auth_service import verify_and_get_payload
+from auth_service import ensure_lobos_user_and_identity
+from auth_service import ensure_user_preferences_row
+from auth_service import get_user_id_from_token
+from auth_service import has_required_membership
+from auth_service import is_admin_token
+from auth_service import is_onboarding_complete
+from auth_service import normalize_text
+from auth_service import profile_to_view
+from auth_service import roles_to_human
+from auth_service import token_identity_from_jwt
+from auth_service import upsert_user_profile_from_identity
+from auth_service import verify_and_get_payload
 
 from recipe_service import FAST_MODEL
 from recipe_service import QUALITY_MODEL
+from recipe_service import RECIPE_MAX_CACHE_AGE_DAYS
 from recipe_service import build_recipe_request_payload_for_user
 from recipe_service import generate_and_save_recipe
 from recipe_service import get_or_clone_shared_recipe
@@ -145,38 +130,6 @@ def seed_default_options_if_empty(db) -> None:
     db.commit()
 
 
-def get_profile_for_user_or_401(db, user_id: str) -> UserProfile:
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-
-    if profile is None:
-        raise HTTPException(status_code=404, detail="Profile not found")
-
-    return profile
-
-
-def get_preferences_for_user(db, user_id: str) -> Optional[UserPreference]:
-    profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
-    if profile is None:
-        return None
-
-    # user_id in UserProfile is external WP user id, so prefs lookup should happen
-    # via auth_service/recipe_service mapping flows during login and generation.
-    # For simple page gating here, generation/login already create the row.
-    # We only need to verify onboarding from any matching UserPreference row.
-    # This query intentionally stays simple and safe.
-    return (
-        db.query(UserPreference)
-        .join(
-            # join condition is implicit via created login flow;
-            # since UserPreference is keyed by lobos_user_id, the row should exist
-            # after /login has run
-            # direct lookup is not available from external user_id here
-            # so page routes rely on existing profile and generation flow
-        )
-        .first()
-    )
-
-
 @app.get("/healthz")
 def healthz() -> Dict[str, str]:
     return {"status": "ok"}
@@ -224,7 +177,7 @@ def login(token: str = Query(..., min_length=1)):
     issuer = normalize_text(payload.get("iss"))
     external_user_id = normalize_text(payload.get("sub"))
 
-    if issuer is None or external_user_id is None:
+    if not issuer or not external_user_id:
         raise HTTPException(status_code=401, detail="Invalid token (missing issuer or sub)")
 
     identity = payload.get("identity")
@@ -251,7 +204,7 @@ def login(token: str = Query(..., min_length=1)):
             external_user_id=external_user_id,
         )
 
-        profile = upsert_user_profile_from_identity(
+        upsert_user_profile_from_identity(
             db=db,
             user_id=external_user_id,
             ident=ident,
@@ -262,8 +215,6 @@ def login(token: str = Query(..., min_length=1)):
                 "prep": opts["prep"][0],
             },
         )
-
-        _ = profile
 
         prefs = ensure_user_preferences_row(
             db=db,
@@ -327,7 +278,12 @@ def landing(request: Request, token: str):
 
 
 @app.get("/my-recipe", response_class=HTMLResponse)
-def my_recipe(request: Request, token: str):
+def my_recipe(
+    request: Request,
+    token: str,
+    recipe_id: Optional[int] = None,
+    error: Optional[str] = None,
+):
     user_id = get_user_id_from_token(token)
 
     if not user_id:
@@ -339,6 +295,7 @@ def my_recipe(request: Request, token: str):
             return RedirectResponse(url=f"/login?token={token}", status_code=302)
 
         profile_view = profile_to_view(profile)
+
         request_payload = build_recipe_request_payload_for_user(
             db=db,
             user_id=user_id,
@@ -347,72 +304,73 @@ def my_recipe(request: Request, token: str):
         request_hash = hash_request(request_payload)
         recipes = list_recipes_for_request(db, user_id, request_hash, limit=50)
 
+        selected_recipe = None
+
+        if recipe_id is not None:
+            selected_recipe = get_recipe_by_id(db, user_id, recipe_id)
+
+        if selected_recipe is None and recipes:
+            selected_recipe = recipes[0]
+
         return templates.TemplateResponse(
             "my_recipe.html",
             {
                 "request": request,
                 "token": token,
                 "profile": profile_view,
-                "recipes": recipes,
+                "options": load_options(db),
                 "fast_model": FAST_MODEL,
                 "quality_model": QUALITY_MODEL,
+                "cache_age_days": RECIPE_MAX_CACHE_AGE_DAYS,
+                "history": recipes,
+                "selected_recipe_id": selected_recipe.id if selected_recipe else None,
+                "selected_title": selected_recipe.title if selected_recipe else None,
+                "recipe_text": selected_recipe.response_text if selected_recipe else None,
+                "recipe_model_used": selected_recipe.model if selected_recipe else None,
+                "recipe_error": error,
             },
         )
 
 
 @app.get("/recipe/{recipe_id}", response_class=HTMLResponse)
 def recipe_detail(request: Request, recipe_id: int, token: str):
+    _ = request
+
     user_id = get_user_id_from_token(token)
 
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    with SessionLocal() as db:
-        row = get_recipe_by_id(db, user_id, recipe_id)
-        if row is None:
-            raise HTTPException(status_code=404, detail="Recipe not found")
-
-        html = f"""
-        <html>
-          <head>
-            <title>{row.title or "Recipe"}</title>
-            <style>
-              body {{
-                font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-                margin: 24px;
-                max-width: 900px;
-              }}
-              pre {{
-                white-space: pre-wrap;
-                word-wrap: break-word;
-              }}
-              a {{
-                text-decoration: none;
-              }}
-            </style>
-          </head>
-          <body>
-            <p><a href="/my-recipe?token={token}">← Back to My Recipes</a></p>
-            <h1>{row.title or "Recipe"}</h1>
-            <pre>{row.response_text}</pre>
-          </body>
-        </html>
-        """
-
-        return HTMLResponse(html)
+    return RedirectResponse(url=f"/my-recipe?token={token}&recipe_id={recipe_id}", status_code=302)
 
 
 @app.post("/generate-recipe")
+@app.post("/recipe/generate")
 def generate_recipe(
     token: str = Form(...),
     quality: str = Form("fast"),
+    force_new: Optional[str] = Form(None),
 ):
     user_id = get_user_id_from_token(token)
 
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    want_quality = str(quality or "").strip().lower() in ("1", "true", "yes", "on", "quality", "best")
+    want_quality = str(quality or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+        "quality",
+        "best",
+    )
+
+    force_generate = str(force_new or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
     with SessionLocal() as db:
         profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
@@ -426,19 +384,19 @@ def generate_recipe(
             user_id=user_id,
             profile_view=profile_view,
         )
-        request_hash = hash_request(request_payload)
 
-         
-        cached = get_or_clone_shared_recipe(
-            db=db,
-            user_id=user_id,
-            request_payload=request_payload,
-        )
-
-
-        if cached is not None:
-            logger.info("recipe_cache_hit user=%s recipe_id=%s", user_id, cached.id)
-            return RedirectResponse(url=f"/recipe/{cached.id}?token={token}", status_code=302)
+        if not force_generate:
+            cached = get_or_clone_shared_recipe(
+                db=db,
+                user_id=user_id,
+                request_payload=request_payload,
+            )
+            if cached is not None:
+                logger.info("recipe_cache_hit user=%s recipe_id=%s", user_id, cached.id)
+                return RedirectResponse(
+                    url=f"/my-recipe?token={token}&recipe_id={cached.id}",
+                    status_code=302,
+                )
 
         row = generate_and_save_recipe(
             db=db,
@@ -447,7 +405,10 @@ def generate_recipe(
             want_quality=want_quality,
         )
 
-        return RedirectResponse(url=f"/recipe/{row.id}?token={token}", status_code=302)
+        return RedirectResponse(
+            url=f"/my-recipe?token={token}&recipe_id={row.id}",
+            status_code=302,
+        )
 
 
 @app.get("/admin", response_class=HTMLResponse)
