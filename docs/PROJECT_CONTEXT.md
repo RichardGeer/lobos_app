@@ -1,5 +1,96 @@
 # Lobos Project Context
 
+## 2026-03-13 16:15 PT — Lobos recipe page / shared cache / force-new fix
+
+### Completed
+- Split recipe logic out of `app.py` into `recipe_service.py`.
+- Split auth/login helper logic out into `auth_service.py`.
+- `app.py` is now much smaller and mostly handles:
+  - routing
+  - template rendering
+  - login/onboarding redirects
+  - admin option routes
+- Removed dependency on legacy `/prefs/save` flow; current recipe preference updates are using `/api/preferences/me`.
+
+### Recipe generation architecture progress
+- Added shared-cache-aware generation flow using `get_or_clone_shared_recipe(...)`.
+- Current recipe lookup path:
+  1. build request payload from saved preferences
+  2. compute core-variant-based request hash
+  3. try user-local/shared recipe reuse
+  4. only generate with Ollama if no reusable candidate exists
+- Overlay-aware recipe reuse path is in place in `recipe_service.py`.
+- This is the first step toward the larger **Recipe Variant Cache Architecture**.
+
+### Force-new bug found and fixed
+- Problem:
+  - checking **Force new recipe (ignore cache)** still returned cached recipe
+  - logs showed:
+    - `recipe_user_cache_hit`
+    - `recipe_shared_cache_hit`
+- Root cause:
+  - `app.py` correctly skipped cache when `force_new` was checked
+  - but `generate_and_save_recipe()` in `recipe_service.py` was still doing its own cache lookup internally
+- Fix:
+  - added `skip_cache` parameter to `generate_and_save_recipe(...)`
+  - when force-new is checked, `app.py` now calls:
+    - `generate_and_save_recipe(..., skip_cache=True)`
+- Result:
+  - force-new now appears to work correctly
+
+### my_recipe.html / app.py alignment fixes
+- Kept richer `my_recipe.html` UI instead of replacing it with a simpler template.
+- Fixed template/backend mismatches:
+  - changed generate form action to `/recipe/generate`
+  - kept alias route support in `app.py` for safety
+  - changed quality checkbox field from `quality_mode` to `quality`
+  - changed history link parameter from `rid` to `recipe_id`
+- Added compatibility support in `app.py`:
+  - `/my-recipe` accepts both `recipe_id` and legacy `rid`
+  - ignores legacy `qm` safely
+- History now displays again and selected recipe loads correctly.
+
+### Current known issues
+1. **LLM output still sometimes starts with fenced markdown**
+   - example:
+     ```markdown
+     # Keto Avocado and Smoked Salmon Breakfast Bowl
+     ```
+   - likely fix next:
+     - strip leading/trailing code fences like ```markdown / ``` from `response_text`
+     - do this in `recipe_service.py` right after Ollama response is received, before title extraction/save
+
+2. **Quality mode still does not seem to switch model**
+   - expected env:
+     - `LOBOS_OLLAMA_MODEL_FAST=mistral:latest`
+     - `LOBOS_OLLAMA_MODEL_QUALITY=llama3.1:8b-instruct-q8_0`
+   - issue observed:
+     - quality mode did not appear to change generation model as expected
+   - next thread should verify:
+     - HTML checkbox name/value
+     - `app.py` form parsing
+     - `want_quality` boolean evaluation
+     - `recipe_service.py` model selection line
+     - logs should clearly show chosen model
+
+### Current key files
+- `app.py`
+- `auth_service.py`
+- `recipe_service.py`
+- `templates/my_recipe.html`
+
+### Recommended next thread
+1. Fix markdown fence stripping in `recipe_service.py`
+2. Fix/verify quality-mode model selection
+3. Add stronger logging:
+   - request entry
+   - selected model
+   - skip_cache state
+4. Continue with **Recipe Variant Cache Architecture**
+   - `recipe_variants`
+   - `recipe_variant_queue`
+   - shared pool fill / backfill
+   - overlay-based ranking/filtering
 
 # PROJECT_CONTEXT.md update
 

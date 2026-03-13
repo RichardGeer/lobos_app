@@ -1,17 +1,20 @@
 this is where we left off
-https://github.com/RichardGeer/lobos_app/blob/main/docs/PROJECT_CONTEXT.md
-and my app.py
-https://github.com/RichardGeer/lobos_app/blob/main/app.py
-and preferences.py
-https://github.com/RichardGeer/lobos_app/blob/main/preferences.py
-and landing.html
-https://github.com/RichardGeer/lobos_app/blob/main/templates/landing.html
+
+
+https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/docs/PROJECT_CONTEXT.md
+
+my app.py
+https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/app.py
+
+recipe_service.py
+https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/recipe_service.py
+
 my_recipe.html
-https://github.com/RichardGeer/lobos_app/blob/main/templates/my_recipe.html
-db
-https://github.com/RichardGeer/lobos_app/blob/main/docs/currentDBschema.sql
-and the rest in my git
-https://github.com/RichardGeer/lobos_app
+https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/templates/my_recipe.html
+
+auth_service.py
+https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/auth_service.py
+
 let us do 
 Split large app.py into:
 

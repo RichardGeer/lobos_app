@@ -282,8 +282,15 @@ def my_recipe(
     request: Request,
     token: str,
     recipe_id: Optional[int] = None,
+    rid: Optional[int] = None,
+    qm: Optional[int] = None,
     error: Optional[str] = None,
 ):
+    _ = qm
+
+    if recipe_id is None and rid is not None:
+        recipe_id = rid
+
     user_id = get_user_id_from_token(token)
 
     if not user_id:
@@ -328,6 +335,8 @@ def my_recipe(
                 "recipe_text": selected_recipe.response_text if selected_recipe else None,
                 "recipe_model_used": selected_recipe.model if selected_recipe else None,
                 "recipe_error": error,
+                "quality_mode": False,
+                "force_new": False,
             },
         )
 
@@ -348,7 +357,7 @@ def recipe_detail(request: Request, recipe_id: int, token: str):
 @app.post("/recipe/generate")
 def generate_recipe(
     token: str = Form(...),
-    quality: str = Form("fast"),
+    quality: Optional[str] = Form(None),
     force_new: Optional[str] = Form(None),
 ):
     user_id = get_user_id_from_token(token)
@@ -370,6 +379,13 @@ def generate_recipe(
         "true",
         "yes",
         "on",
+    )
+
+    logger.info(
+        "recipe_generate_request user=%s quality=%s force_new=%s",
+        user_id,
+        want_quality,
+        force_generate,
     )
 
     with SessionLocal() as db:
@@ -403,6 +419,7 @@ def generate_recipe(
             user_id=user_id,
             profile_view=profile_view,
             want_quality=want_quality,
+            skip_cache=force_generate,
         )
 
         return RedirectResponse(

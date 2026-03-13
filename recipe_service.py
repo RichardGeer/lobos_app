@@ -810,6 +810,7 @@ def generate_and_save_recipe(
     user_id: str,
     profile_view: Dict[str, Any],
     want_quality: bool,
+    skip_cache: bool = False,
 ) -> RecipeResult:
     model = QUALITY_MODEL if want_quality else FAST_MODEL
     logger.info("recipe_generate user=%s model=%s", user_id, model)
@@ -817,15 +818,15 @@ def generate_and_save_recipe(
     request_payload = build_recipe_request_payload_for_user(db, user_id, profile_view)
     request_hash = hash_request(request_payload)
 
-    # First try user-local + shared-pool clone before generating.
-    cached = get_or_clone_shared_recipe(
-        db=db,
-        user_id=user_id,
-        request_payload=request_payload,
-    )
-    if cached is not None:
-        logger.info("recipe_shared_cache_hit user=%s recipe_id=%s", user_id, cached.id)
-        return cached
+    if not skip_cache:
+        cached = get_or_clone_shared_recipe(
+            db=db,
+            user_id=user_id,
+            request_payload=request_payload,
+        )
+        if cached is not None:
+            logger.info("recipe_shared_cache_hit user=%s recipe_id=%s", user_id, cached.id)
+            return cached
 
     prompt = build_prompt_from_recipe_payload(request_payload)
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
