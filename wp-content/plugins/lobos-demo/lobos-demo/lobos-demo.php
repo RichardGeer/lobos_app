@@ -1,8 +1,8 @@
 <?php
 /**
- * Plugin Name: Lobos Dev SSO
- * Description: Lobos DEV SSO plugin with button shortcode, debug shortcode, JWT redirect, MemberPress membership detection, and admin settings.
- * Version: 0.6
+ * Plugin Name: Lobos Demo SSO
+ * Description: Lobos Demo SSO plugin with button shortcode, debug shortcode, JWT redirect, MemberPress membership detection, and admin settings.
+ * Version: 0.7
  * Author: Paul
  */
 
@@ -11,13 +11,13 @@ if (!defined('ABSPATH'))
     exit;
 }
 
-if (!class_exists('Lobos_Dev_SSO_Plugin'))
+if (!class_exists('Lobos_Demo_SSOPlugin'))
 {
-    class Lobos_Dev_SSO_Plugin
+    class Lobos_Demo_SSO_Plugin
     {
         const OPTION_KEY = 'lobos_dev_sso_options';
 
-        const DEFAULT_URL = 'http://lobos.foodinformed.com:8000/login';
+        const DEFAULT_URL = 'http://my.lobos.com:8000/login';
         const DEFAULT_SECRET = '5FqrSBGbnTwx1uJe05H65312mpuLNP8swfmQCdwCoOETIMy7KR5lMUS4ipXfZ5fT';
         const DEFAULT_ISSUER = 'wp-sim';
         const DEFAULT_REQUIRE_MEMBERSHIP = 0;
@@ -27,10 +27,9 @@ if (!class_exists('Lobos_Dev_SSO_Plugin'))
             add_action('admin_menu', array($this, 'admin_menu'));
             add_action('admin_init', array($this, 'admin_init'));
 
-            add_shortcode('lobos_dev_button', array($this, 'shortcode_button'));
-            add_shortcode('lobos_dev_sso_button', array($this, 'shortcode_button'));
-            add_shortcode('lobos_dev_debug', array($this, 'shortcode_debug'));
-
+            add_shortcode('lobos_demo_button', array($this, 'shortcode_button'));
+            add_shortcode('lobos_demo_debug', array($this, 'shortcode_debug'));
+    
             add_action('init', array($this, 'maybe_handle_actions'));
         }
 
@@ -486,5 +485,5 @@ if (!class_exists('Lobos_Dev_SSO_Plugin'))
         }
     }
 
-    new Lobos_Dev_SSO_Plugin();
+    new Lobos_Demo_SSO_Plugin();
 }
