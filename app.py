@@ -139,13 +139,8 @@ def healthz() -> Dict[str, str]:
 def home() -> HTMLResponse:
     return HTMLResponse(
         """
-        <html>
-          <head><title>Lobos</title></head>
-          <body style="font-family: sans-serif; margin: 40px;">
-            <h1>Lobos</h1>
-            <p>Use the WordPress SSO login link to enter the app.</p>
-          </body>
-        </html>
+        <h1>Lobos</h1>
+        <p>Use the WordPress SSO login link to enter the app.</p>
         """
     )
 
@@ -153,7 +148,6 @@ def home() -> HTMLResponse:
 @app.get("/me")
 def me(token: str = Query(..., min_length=1)) -> Dict[str, Any]:
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -238,13 +232,8 @@ def access_denied(token: Optional[str] = None):
 
     return HTMLResponse(
         """
-        <html>
-          <head><title>Lobos - Access Denied</title></head>
-          <body style="font-family: sans-serif; margin: 40px;">
-            <h1>Access denied</h1>
-            <p>Active membership required to access Lobos.</p>
-          </body>
-        </html>
+        <h1>Access denied</h1>
+        <p>Active membership required to access Lobos.</p>
         """,
         status_code=403,
     )
@@ -253,7 +242,6 @@ def access_denied(token: Optional[str] = None):
 @app.get("/landing", response_class=HTMLResponse)
 def landing(request: Request, token: str):
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -286,13 +274,12 @@ def my_recipe(
     qm: Optional[int] = None,
     error: Optional[str] = None,
 ):
-    _ = qm
-
     if recipe_id is None and rid is not None:
         recipe_id = rid
 
-    user_id = get_user_id_from_token(token)
+    quality_mode = bool(qm)
 
+    user_id = get_user_id_from_token(token)
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -309,6 +296,7 @@ def my_recipe(
             profile_view=profile_view,
         )
         request_hash = hash_request(request_payload)
+
         recipes = list_recipes_for_request(db, user_id, request_hash, limit=50)
 
         selected_recipe = None
@@ -335,7 +323,7 @@ def my_recipe(
                 "recipe_text": selected_recipe.response_text if selected_recipe else None,
                 "recipe_model_used": selected_recipe.model if selected_recipe else None,
                 "recipe_error": error,
-                "quality_mode": False,
+                "quality_mode": quality_mode,
                 "force_new": False,
             },
         )
@@ -346,7 +334,6 @@ def recipe_detail(request: Request, recipe_id: int, token: str):
     _ = request
 
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -361,7 +348,6 @@ def generate_recipe(
     force_new: Optional[str] = Form(None),
 ):
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -382,8 +368,9 @@ def generate_recipe(
     )
 
     logger.info(
-        "recipe_generate_request user=%s quality=%s force_new=%s",
+        "recipe_generate_request user=%s quality=%s want_quality=%s force_new=%s",
         user_id,
+        quality,
         want_quality,
         force_generate,
     )
@@ -407,10 +394,12 @@ def generate_recipe(
                 user_id=user_id,
                 request_payload=request_payload,
             )
+
             if cached is not None:
                 logger.info("recipe_cache_hit user=%s recipe_id=%s", user_id, cached.id)
+                qm = 1 if want_quality else 0
                 return RedirectResponse(
-                    url=f"/my-recipe?token={token}&recipe_id={cached.id}",
+                    url=f"/my-recipe?token={token}&recipe_id={cached.id}&qm={qm}",
                     status_code=302,
                 )
 
@@ -419,11 +408,11 @@ def generate_recipe(
             user_id=user_id,
             profile_view=profile_view,
             want_quality=want_quality,
-            skip_cache=force_generate,
         )
 
+        qm = 1 if want_quality else 0
         return RedirectResponse(
-            url=f"/my-recipe?token={token}&recipe_id={row.id}",
+            url=f"/my-recipe?token={token}&recipe_id={row.id}&qm={qm}",
             status_code=302,
         )
 
@@ -431,7 +420,6 @@ def generate_recipe(
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request, token: str):
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -487,7 +475,6 @@ def admin_option_add(
     sort_order: int = Form(0),
 ):
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 
@@ -525,7 +512,6 @@ def admin_option_update(
     sort_order: int = Form(0),
 ):
     user_id = get_user_id_from_token(token)
-
     if not user_id:
         raise HTTPException(status_code=401, detail="Invalid token")
 

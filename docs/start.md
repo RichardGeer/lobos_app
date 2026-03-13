@@ -1,6 +1,5 @@
 this is where we left off
 
-
 https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/docs/PROJECT_CONTEXT.md
 
 my app.py
@@ -14,6 +13,19 @@ https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/template
 
 auth_service.py
 https://raw.githubusercontent.com/RichardGeer/lobos_app/refs/heads/main/auth_service.py
+
+looks like the forced ignore cache is working nice. but the reply has 
+```markdown in the begining. like
+
+```markdown 
+# Keto Avocado and Smoked Salmon Breakfast Bowl
+not sure if this is avoidable if not, we might just detect and remove that like we did before. 
+also the quailty mode did not seem to work as it should change the model to a different one here is the environment variable 
+Environment="LOBOS_OLLAMA_MODEL_FAST=mistral:latest"
+Environment="LOBOS_OLLAMA_MODEL_QUALITY=llama3.1:8b-instruct-q8_0"
+give me a summary to paste to PROJECT_CONTEXT.md to start a new thread. 
+
+
 
 let us do 
 Split large app.py into:

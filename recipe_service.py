@@ -17,6 +17,7 @@ from models import RecipeResult
 from models import UserAllergy
 from models import UserPreference
 
+
 logger = logging.getLogger("lobos")
 
 OLLAMA_BASE_URL = os.getenv("LOBOS_OLLAMA_BASE_URL", "http://127.0.0.1:11434").rstrip("/")
@@ -29,7 +30,6 @@ RECIPE_MAX_CACHE_AGE_DAYS = int(
 
 LOBOS_JWT_ISSUER = os.getenv("LOBOS_JWT_ISSUER", "wp-sim").strip()
 
-# Shared-pool tuning
 RECIPE_SHARED_POOL_SCAN_LIMIT = int(os.getenv("LOBOS_RECIPE_SHARED_POOL_SCAN_LIMIT", "40"))
 RECIPE_SHARED_POOL_CLONE_LIMIT = int(os.getenv("LOBOS_RECIPE_SHARED_POOL_CLONE_LIMIT", "1"))
 RECIPE_MIN_ACCEPTABLE_OVERLAY_SCORE = int(os.getenv("LOBOS_RECIPE_MIN_ACCEPTABLE_OVERLAY_SCORE", "0"))
@@ -53,6 +53,56 @@ def clean_title(value: str) -> str:
 
     text = re.sub(r"\s+", " ", text).strip()
     return text
+
+
+def normalize_bool(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    if value is None:
+        return False
+
+    text = str(value).strip().lower()
+    return text in {"1", "true", "yes", "y", "on", "quality"}
+
+
+def strip_markdown_fences(text: str) -> str:
+    if not text:
+        return ""
+
+    cleaned = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    # Remove a full fenced wrapper if the whole response is wrapped.
+    fenced_match = re.match(
+        r"^\s*```(?:markdown|md)?\s*\n(?P<body>.*?)(?:\n```)\s*$",
+        cleaned,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if fenced_match:
+        cleaned = fenced_match.group("body").strip()
+
+    # Defensive cleanup for partial leading/trailing fences.
+    lines = cleaned.splitlines()
+
+    if lines and re.match(r"^\s*```(?:markdown|md)?\s*$", lines[0], flags=re.IGNORECASE):
+        lines = lines[1:]
+
+    while lines and re.match(r"^\s*```\s*$", lines[-1]):
+        lines = lines[:-1]
+
+    cleaned = "\n".join(lines).strip()
+
+    # Sometimes model returns a stray first line like ```markdown without closing properly.
+    cleaned = re.sub(r"^\s*```(?:markdown|md)?\s*\n?", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\n?```\s*$", "", cleaned).strip()
+
+    return cleaned
+
+
+def sanitize_recipe_response(text: str) -> str:
+    cleaned = strip_markdown_fences(text)
+    cleaned = cleaned.replace("\u0000", "").strip()
+    return cleaned
 
 
 def decimal_to_float(value: Any) -> Optional[float]:
@@ -161,8 +211,10 @@ def bucket_glp1_phase(glp1_status: Optional[str], glp1_dosage: Optional[str]) ->
     if dosage:
         if any(token in dosage for token in ["0.25", "0.5"]):
             return "early"
+
         if any(token in dosage for token in ["1.0", "1 ", "1mg", "1 mg"]):
             return "active"
+
         if any(token in dosage for token in ["1.7", "2.0", "2.4", "2.5", "5", "7.5", "10", "12.5", "15"]):
             return "maintenance"
 
@@ -189,10 +241,12 @@ def bucket_goal(current_weight_lb: Optional[float], goal_weight_lb: Optional[flo
 
 def parse_free_text_terms(other_allergy: Optional[str]) -> List[str]:
     text = normalize_text(other_allergy)
+
     if not text:
         return []
 
     parts = re.split(r"[,;/\n]| and | or ", text)
+
     cleaned: List[str] = []
 
     for part in parts:
@@ -219,7 +273,6 @@ def extract_overlay_exclusions(other_allergy: Optional[str]) -> List[str]:
     raw_terms = parse_free_text_terms(other_allergy)
     exclusions: List[str] = []
 
-    # Keep this conservative: only pull obvious food terms out of free text.
     known_food_terms = [
         "cilantro",
         "mushroom",
@@ -275,20 +328,24 @@ def normalize_allergy_codes(codes: List[str]) -> List[str]:
 
 def medical_exclusion_tags(allergy_codes: List[str], other_allergy: Optional[str]) -> List[str]:
     tags: List[str] = []
-
     code_set = set(normalize_allergy_codes(allergy_codes))
     free_text = normalize_text(other_allergy)
 
     if "shellfish" in code_set or "shellfish" in free_text:
         tags.append("shellfish")
+
     if "nuts" in code_set or "tree_nuts" in code_set or "peanut" in free_text or "nuts" in free_text:
         tags.append("nuts")
+
     if "dairy" in code_set or "dairy" in free_text or "milk" in free_text:
         tags.append("dairy")
+
     if "gluten" in code_set or "wheat" in code_set or "gluten" in free_text or "wheat" in free_text:
         tags.append("gluten")
+
     if "soy" in code_set or "soy" in free_text:
         tags.append("soy")
+
     if "egg" in code_set or "eggs" in free_text or "egg" in free_text:
         tags.append("egg")
 
@@ -327,6 +384,7 @@ def get_allergy_codes_for_lobos_user(db, lobos_user_id: int) -> List[str]:
         .scalars()
         .all()
     )
+
     return list(rows)
 
 
@@ -402,7 +460,7 @@ def build_core_variant_json(recipe_payload: Dict[str, Any]) -> Dict[str, Any]:
         other_allergy=recipe_payload.get("other_allergy"),
     )
 
-    core = {
+    return {
         "eating_style": normalize_text(recipe_payload.get("eating_style")) or "no_preference",
         "meal_type": normalize_text(recipe_payload.get("meal_type")) or "dinner",
         "macro_band": bucket_macro_preset(recipe_payload.get("macro_preset")),
@@ -419,11 +477,9 @@ def build_core_variant_json(recipe_payload: Dict[str, Any]) -> Dict[str, Any]:
         "medical_exclusions": medical_tags,
     }
 
-    return core
-
 
 def build_overlay_json(recipe_payload: Dict[str, Any]) -> Dict[str, Any]:
-    overlay = {
+    return {
         "user_id": recipe_payload.get("user_id"),
         "first_name": recipe_payload.get("first_name"),
         "glp1_dosage": recipe_payload.get("glp1_dosage"),
@@ -435,8 +491,6 @@ def build_overlay_json(recipe_payload: Dict[str, Any]) -> Dict[str, Any]:
         "overlay_exclusions": extract_overlay_exclusions(recipe_payload.get("other_allergy")),
         "overlay_notes": parse_free_text_terms(recipe_payload.get("other_allergy")),
     }
-
-    return overlay
 
 
 def request_payload_from_profile(profile_view: Dict[str, Any]) -> Dict[str, Any]:
@@ -516,7 +570,10 @@ Include:
 5. Estimated nutrition
 6. Why it fits this user
 
-Output clean markdown only.
+Return plain markdown only.
+Do not wrap the response in triple backticks.
+Do not use ```markdown.
+Do not use code fences.
 """
 
 
@@ -541,6 +598,13 @@ def extract_title_and_preview(response_text: str) -> Tuple[str, str]:
 def call_ollama(model: str, prompt: str) -> str:
     url = f"{OLLAMA_BASE_URL}/api/generate"
 
+    logger.info(
+        "ollama_generate model=%s fast_model=%s quality_model=%s",
+        model,
+        FAST_MODEL,
+        QUALITY_MODEL,
+    )
+
     response = requests.post(
         url,
         json={"model": model, "prompt": prompt, "stream": False},
@@ -549,7 +613,8 @@ def call_ollama(model: str, prompt: str) -> str:
     response.raise_for_status()
 
     data = response.json()
-    return (data.get("response") or "").strip()
+    raw_text = (data.get("response") or "").strip()
+    return sanitize_recipe_response(raw_text)
 
 
 def cache_cutoff_ts() -> int:
@@ -698,6 +763,7 @@ def pick_best_shared_recipe(
         return None
 
     best_score, best_row = scored[0]
+
     if best_score < RECIPE_MIN_ACCEPTABLE_OVERLAY_SCORE:
         return None
 
@@ -709,15 +775,11 @@ def get_cached_recipe(
     user_id: str,
     request_hash: str,
 ) -> Optional[RecipeResult]:
-    # Preserve the original app.py call shape.
-    # request_hash is now intentionally based on CORE VARIANT only.
     user_row = get_user_cached_recipe(db, user_id, request_hash)
     if user_row is not None:
         logger.info("recipe_user_cache_hit user=%s recipe_id=%s", user_id, user_row.id)
         return user_row
 
-    # No full request payload is available here, so this function remains a lightweight fallback.
-    # Shared clone with overlay-aware scoring is handled by get_or_clone_shared_recipe().
     return None
 
 
@@ -785,23 +847,18 @@ def build_prompt(profile_view: Dict[str, Any], db=None, user_id: Optional[str] =
         return build_prompt_from_recipe_payload(payload)
 
     payload = request_payload_from_profile(profile_view)
+
     return f"""Create one healthy recipe in clean markdown.
 
-User context:
-- Eating style: {payload.get("eating_style") or "No Preference"}
-- Meal type: {payload.get("meal_type") or "Dinner"}
-- Macro preset: {payload.get("macro_preset") or "Balanced"}
-- Prep preference: {payload.get("prep") or "Standard"}
+Eating style: {payload.get("eating_style") or "No Preference"}
+Meal type: {payload.get("meal_type") or "Dinner"}
+Macro preset: {payload.get("macro_preset") or "Balanced"}
+Preparation: {payload.get("prep") or "Standard"}
 
-Include:
-1. Title
-2. Short description
-3. Ingredients
-4. Steps
-5. Estimated nutrition
-6. Why it fits this user
-
-Output clean markdown only.
+Return plain markdown only.
+Do not wrap the response in triple backticks.
+Do not use ```markdown.
+Do not use code fences.
 """
 
 
@@ -809,38 +866,39 @@ def generate_and_save_recipe(
     db,
     user_id: str,
     profile_view: Dict[str, Any],
-    want_quality: bool,
-    skip_cache: bool = False,
+    want_quality: Any,
 ) -> RecipeResult:
-    model = QUALITY_MODEL if want_quality else FAST_MODEL
-    logger.info("recipe_generate user=%s model=%s", user_id, model)
+    want_quality_bool = normalize_bool(want_quality)
+    model = QUALITY_MODEL if want_quality_bool else FAST_MODEL
 
-    request_payload = build_recipe_request_payload_for_user(db, user_id, profile_view)
-    request_hash = hash_request(request_payload)
+    logger.info(
+        "recipe_generate user=%s want_quality=%s want_quality_bool=%s model=%s fast_model=%s quality_model=%s",
+        user_id,
+        want_quality,
+        want_quality_bool,
+        model,
+        FAST_MODEL,
+        QUALITY_MODEL,
+    )
 
-    if not skip_cache:
-        cached = get_or_clone_shared_recipe(
-            db=db,
-            user_id=user_id,
-            request_payload=request_payload,
-        )
-        if cached is not None:
-            logger.info("recipe_shared_cache_hit user=%s recipe_id=%s", user_id, cached.id)
-            return cached
+    request_payload = build_recipe_request_payload_for_user(
+        db=db,
+        user_id=user_id,
+        profile_view=profile_view,
+    )
 
     prompt = build_prompt_from_recipe_payload(request_payload)
+    request_hash = hash_request(request_payload)
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     response_text = call_ollama(model, prompt)
     title, preview = extract_title_and_preview(response_text)
 
-    envelope = build_request_envelope(request_payload)
-
     row = RecipeResult(
         user_id=user_id,
         created_at=now_ts(),
         request_hash=request_hash,
-        request_json=json.dumps(envelope, ensure_ascii=False),
+        request_json=json.dumps(build_request_envelope(request_payload), ensure_ascii=False),
         response_text=response_text,
         model=model,
         prompt_hash=prompt_hash,
@@ -851,7 +909,5 @@ def generate_and_save_recipe(
     db.add(row)
     db.commit()
     db.refresh(row)
-
-    logger.info("recipe_generated_saved user=%s recipe_id=%s", user_id, row.id)
 
     return row
