@@ -310,18 +310,179 @@ def profile_to_view(p: UserProfile) -> Dict[str, Any]:
         "membership": membership_obj,
     }
 
+def decimal_to_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
 
-def build_prompt(profile_view: Dict[str, Any]) -> str:
-    return f"""Create a healthy recipe.
 
-Eating Style: {profile_view.get("eating_style")}
-Meal Type: {profile_view.get("meal_type")}
-Macro Preset: {profile_view.get("macro_preset")}
-Preparation: {profile_view.get("prep")}
+def height_parts_from_total(height_in: Optional[int]) -> Tuple[Optional[int], Optional[int]]:
+    if height_in is None:
+        return None, None
+    return height_in // 12, height_in % 12
 
-Output clean markdown format.
+
+def get_lobos_user_id_from_external_user_id(
+    db,
+    external_user_id: str,
+    issuer: Optional[str] = None,
+) -> Optional[int]:
+    issuer_to_use = issuer or LOBOS_JWT_ISSUER
+
+    row = (
+        db.query(ExternalIdentity)
+        .filter(ExternalIdentity.provider == "wordpress")
+        .filter(ExternalIdentity.issuer == issuer_to_use)
+        .filter(ExternalIdentity.external_user_id == str(external_user_id))
+        .first()
+    )
+
+    if row is None:
+        return None
+
+    return int(row.lobos_user_id)
+
+
+def get_allergy_codes_for_lobos_user(db, lobos_user_id: int) -> List[str]:
+    stmt = (
+        select(ExternalIdentity)  # placeholder to keep SQLAlchemy import used consistently elsewhere if needed
+    )
+    del stmt
+
+    rows = db.execute(
+        select(
+            __import__("models").AllergyOption.code
+        )
+        .join(
+            __import__("models").UserAllergy,
+            __import__("models").UserAllergy.allergy_option_id == __import__("models").AllergyOption.id,
+        )
+        .where(__import__("models").UserAllergy.lobos_user_id == lobos_user_id)
+        .order_by(__import__("models").AllergyOption.sort_order.asc(), __import__("models").AllergyOption.id.asc())
+    ).scalars().all()
+
+    return list(rows)
+
+def get_allergy_codes_for_lobos_user(db, lobos_user_id: int) -> List[str]:
+    from models import AllergyOption, UserAllergy
+
+    rows = db.execute(
+        select(AllergyOption.code)
+        .join(UserAllergy, UserAllergy.allergy_option_id == AllergyOption.id)
+        .where(UserAllergy.lobos_user_id == lobos_user_id)
+        .order_by(AllergyOption.sort_order.asc(), AllergyOption.id.asc())
+    ).scalars().all()
+
+    return list(rows)
+
+
+def build_recipe_request_payload_for_user(
+    db,
+    user_id: str,
+    profile_view: Dict[str, Any],
+) -> Dict[str, Any]:
+    lobos_user_id = get_lobos_user_id_from_external_user_id(db, user_id)
+    prefs = None
+    allergy_codes: List[str] = []
+
+    if lobos_user_id is not None:
+        prefs = db.query(UserPreference).filter(UserPreference.lobos_user_id == lobos_user_id).first()
+        if prefs is not None:
+            allergy_codes = get_allergy_codes_for_lobos_user(db, lobos_user_id)
+
+    payload = {
+        "eating_style": None,
+        "glp1_status": None,
+        "glp1_dosage": None,
+        "allergy_codes": allergy_codes,
+        "other_allergy": None,
+        "birth_year": None,
+        "current_weight_lb": None,
+        "goal_weight_lb": None,
+        "height_in": None,
+        "height_ft": None,
+        "height_in_remainder": None,
+        "user_id": profile_view.get("user_id"),
+        "first_name": profile_view.get("first_name"),
+    }
+
+    if prefs is not None:
+        payload["eating_style"] = prefs.eating_style
+        payload["glp1_status"] = prefs.glp1_status
+        payload["glp1_dosage"] = prefs.glp1_dosage
+        payload["other_allergy"] = prefs.other_allergy
+        payload["birth_year"] = prefs.birth_year
+        payload["current_weight_lb"] = decimal_to_float(getattr(prefs, "current_weight_lb", None))
+        payload["goal_weight_lb"] = decimal_to_float(getattr(prefs, "goal_weight_lb", None))
+        payload["height_in"] = getattr(prefs, "height_in", None)
+
+        height_ft, height_in_remainder = height_parts_from_total(payload["height_in"])
+        payload["height_ft"] = height_ft
+        payload["height_in_remainder"] = height_in_remainder
+
+    if not payload["eating_style"]:
+        payload["eating_style"] = profile_view.get("eating_style") or "No Preference"
+
+    return payload
+
+
+def build_prompt_from_recipe_payload(recipe_payload: Dict[str, Any]) -> str:
+    allergy_text = ", ".join(recipe_payload.get("allergy_codes") or [])
+    if not allergy_text:
+        allergy_text = "None listed"
+
+    other_allergy = recipe_payload.get("other_allergy") or "None"
+
+    return f"""Create one healthy GLP-1-friendly recipe in clean markdown.
+
+User context:
+- Eating style: {recipe_payload.get("eating_style") or "No Preference"}
+- GLP-1 status: {recipe_payload.get("glp1_status") or "Not specified"}
+- GLP-1 dosage: {recipe_payload.get("glp1_dosage") or "Not specified"}
+- Allergies: {allergy_text}
+- Other allergy or food issue: {other_allergy}
+- Birth year: {recipe_payload.get("birth_year") or "Not specified"}
+- Current weight (lb): {recipe_payload.get("current_weight_lb") or "Not specified"}
+- Goal weight (lb): {recipe_payload.get("goal_weight_lb") or "Not specified"}
+- Height: {recipe_payload.get("height_ft") or "?"} ft {recipe_payload.get("height_in_remainder") or "?"} in
+
+Requirements:
+- Avoid all listed allergies and food issues.
+- Keep the recipe practical and realistic.
+- Prefer high-protein, moderate-portion, easy-to-tolerate meal ideas suitable for GLP-1 users.
+- Include:
+  1. Title
+  2. Short description
+  3. Ingredients
+  4. Steps
+  5. Estimated nutrition
+  6. Why it fits this user
+
+Output clean markdown only.
 """
 
+
+def build_prompt(profile_view: Dict[str, Any]) -> str:
+    return build_prompt_from_recipe_payload(
+        {
+            "eating_style": profile_view.get("eating_style"),
+            "glp1_status": profile_view.get("glp1_status"),
+            "glp1_dosage": profile_view.get("glp1_dosage"),
+            "allergy_codes": profile_view.get("allergy_codes") or [],
+            "other_allergy": profile_view.get("other_allergy"),
+            "birth_year": profile_view.get("birth_year"),
+            "current_weight_lb": profile_view.get("current_weight_lb"),
+            "goal_weight_lb": profile_view.get("goal_weight_lb"),
+            "height_in": profile_view.get("height_in"),
+            "height_ft": profile_view.get("height_ft"),
+            "height_in_remainder": profile_view.get("height_in_remainder"),
+            "user_id": profile_view.get("user_id"),
+            "first_name": profile_view.get("first_name"),
+        }
+    )
 
 def call_ollama(model: str, prompt: str) -> str:
     url = f"{OLLAMA_BASE_URL}/api/generate"
@@ -334,13 +495,17 @@ def call_ollama(model: str, prompt: str) -> str:
     data = resp.json()
     return (data.get("response") or "").strip()
 
-
 def request_payload_from_profile(profile_view: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "eating_style": profile_view.get("eating_style"),
-        "meal_type": profile_view.get("meal_type"),
-        "macro_preset": profile_view.get("macro_preset"),
-        "prep": profile_view.get("prep"),
+        "glp1_status": profile_view.get("glp1_status"),
+        "glp1_dosage": profile_view.get("glp1_dosage"),
+        "allergy_codes": profile_view.get("allergy_codes") or [],
+        "other_allergy": profile_view.get("other_allergy"),
+        "birth_year": profile_view.get("birth_year"),
+        "current_weight_lb": profile_view.get("current_weight_lb"),
+        "goal_weight_lb": profile_view.get("goal_weight_lb"),
+        "height_in": profile_view.get("height_in"),
     }
 
 
@@ -415,15 +580,20 @@ def get_recipe_by_id(db, user_id: str, rid: int) -> Optional[RecipeResult]:
 
 def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], want_quality: bool) -> RecipeResult:
     model = QUALITY_MODEL if want_quality else FAST_MODEL
-    prompt = build_prompt(profile_view)
 
-    req_payload = request_payload_from_profile(profile_view)
+    req_payload = build_recipe_request_payload_for_user(
+        db=db,
+        user_id=user_id,
+        profile_view=profile_view,
+    )
+
+    prompt = build_prompt_from_recipe_payload(req_payload)
     req_hash = hash_request(req_payload)
     prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
 
     response_text = call_ollama(model, prompt)
-    title, preview = extract_title_and_preview(response_text)
 
+    title, preview = extract_title_and_preview(response_text)
     row = RecipeResult(
         user_id=user_id,
         created_at=now_ts(),
@@ -438,8 +608,8 @@ def generate_and_save_recipe(db, user_id: str, profile_view: Dict[str, Any], wan
 
     db.add(row)
     db.commit()
-    return row
 
+    return row
 
 def is_admin_token(token: str) -> bool:
     ident = token_identity_from_jwt(token)
@@ -586,24 +756,22 @@ def get_or_create_user_profile_from_identity(
     db.flush()
     return profile
 
-
 def ensure_user_preferences_row(
     db,
     lobos_user_id: int,
     profile: UserProfile,
 ) -> UserPreference:
     prefs = db.query(UserPreference).filter(UserPreference.lobos_user_id == lobos_user_id).first()
+
     if not prefs:
         prefs = UserPreference(
             lobos_user_id=lobos_user_id,
-            current_weight=None,
-            goal_weight=None,
-            height=None,
-            age=None,
+            birth_year=None,
+            current_weight_lb=None,
+            goal_weight_lb=None,
+            height_in=None,
+            other_allergy=None,
             eating_style=profile.eating_style,
-            meal_type=profile.meal_type,
-            macro_preset=profile.macro_preset,
-            prep=profile.prep,
             glp1_status=None,
             glp1_dosage=None,
             onboarding_completed=False,
@@ -612,8 +780,8 @@ def ensure_user_preferences_row(
         )
         db.add(prefs)
         db.flush()
-    return prefs
 
+    return prefs
 
 def is_onboarding_complete(prefs: Optional[UserPreference]) -> bool:
     return bool(prefs and prefs.onboarding_completed)

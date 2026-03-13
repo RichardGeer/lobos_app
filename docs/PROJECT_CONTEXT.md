@@ -1,4 +1,60 @@
 # Lobos Project Context
+
+
+## 2026-03-13 8:19 AM PT - Preferences UI v2 and app.py generation alignment
+
+Completed:
+- Updated `landing.html` concept to split onboarding into:
+  - left/profile basics
+  - right/bottom recipe-related preferences
+- Updated `my_recipe.html` concept to use a left-side recipe-preferences panel so users can modify recipe-related preferences more easily while generating recipes.
+- Confirmed `preferences.py` is the primary saved source of truth for:
+  - eating_style
+  - allergies
+  - other_allergy
+  - glp1_status
+  - glp1_dosage
+  - birth_year
+  - current_weight_lb
+  - goal_weight_lb
+  - height_in / feet+inches UI translation
+
+app.py changes prepared:
+- Fixed `ensure_user_preferences_row()` to match the newer `user_preferences` schema instead of old columns like:
+  - current_weight
+  - goal_weight
+  - height
+  - age
+  - meal_type
+  - macro_preset
+  - prep
+- Added app.py helper logic so recipe generation can read from saved `UserPreference` + allergy mappings instead of relying only on old `UserProfile` recipe knobs.
+- Updated recipe prompt generation direction to focus on:
+  - eating_style
+  - allergies / other_allergy
+  - glp1_status
+  - glp1_dosage
+  - birth_year
+  - current_weight_lb
+  - goal_weight_lb
+  - height
+
+Why this matters:
+- Keeps onboarding/profile data as canonical saved preferences.
+- Lets `my_recipe.html` act as the easy editing surface for recipe-related preferences.
+- Moves Lobos closer to generating recipes from actual GLP-1 preference data instead of older placeholder fields.
+
+Next step:
+- Apply the app.py patch.
+- Restart service and test:
+  - `/login`
+  - `/landing`
+  - save preferences
+  - complete onboarding
+  - `/my_recipe`
+  - recipe generation
+- Then do the next app.py pass to clean out old `meal_type` / `macro_preset` / `prep` usage from any remaining routes and admin flows.
+
 ## Important Variant Design Rule
 
 To prevent variant explosion, Lobos should separate recipe preferences into:
