@@ -1,6 +1,286 @@
 # Lobos Project Context
 
 
+# PROJECT_CONTEXT.md update
+
+**Timestamp:** 2026-03-13 12:20PM PDT (San Jose, CA)
+
+## Lobos App – Recipe Generation & Preferences Integration (Stable State)
+
+We completed integration between the **new onboarding/preferences system** and the **existing recipe generation engine**.
+
+### Key Fixes Completed
+
+**1. Recipe generation crash fixed**
+
+Issue:
+
+```
+NameError: name 'select' is not defined
+```
+
+Root cause:
+`select()` from SQLAlchemy was used in `get_allergy_codes_for_lobos_user()` but not imported.
+
+Fix:
+
+```python
+from sqlalchemy import select
+```
+
+Also removed a **duplicate legacy implementation** of `get_allergy_codes_for_lobos_user()`.
+
+---
+
+### 2. Recipe preferences restored
+
+The following fields were reintroduced into the workflow:
+
+* `meal_type`
+* `macro_preset`
+* `prep`
+* `eating_style`
+* `glp1_status`
+* `glp1_dosage`
+* `allergy_codes`
+* `other_allergy`
+
+These are now sourced from:
+
+```
+user_preferences
+```
+
+instead of relying on `UserProfile`.
+
+---
+
+### 3. Preferences API expanded
+
+`preferences.py` now returns options for:
+
+```
+eating_style
+meal_type
+macro_preset
+prep
+glp1_status
+```
+
+And `PreferencesMeResponse` now includes:
+
+```
+meal_type
+macro_preset
+prep
+glp1_status
+glp1_dosage
+allergy_codes
+other_allergy
+```
+
+---
+
+### 4. Landing page fixes
+
+`landing.html`
+
+Fixed incorrect redirect:
+
+```
+/my_recipe
+```
+
+→ replaced with
+
+```
+/my-recipe
+```
+
+so onboarding redirect now works correctly.
+
+---
+
+### 5. My Recipe page rebuilt
+
+`my_recipe.html` now:
+
+* loads preferences from `/api/preferences/me`
+* loads option lists from `/api/preferences/options`
+* allows updating recipe preferences without returning to onboarding
+* posts recipe generation to:
+
+```
+POST /recipe/generate
+```
+
+Recipe history and selected recipe display now work again.
+
+---
+
+### 6. Recipe engine integration
+
+Recipe generation pipeline now works end-to-end:
+
+```
+/my-recipe
+   ↓
+POST /recipe/generate
+   ↓
+generate_and_save_recipe()
+   ↓
+call_ollama()
+   ↓
+RecipeResult saved
+   ↓
+redirect → /my-recipe?rid=<id>
+```
+
+Caching behavior:
+
+```
+request_hash = sha256(recipe_payload)
+```
+
+Recipes are reused if within:
+
+```
+RECIPE_MAX_CACHE_AGE_DAYS
+```
+
+(default: 7 days).
+
+---
+
+### 7. Current architecture (important)
+
+**User identity**
+
+```
+ExternalIdentity
+   → LobosUser
+```
+
+**User profile**
+
+```
+UserProfile
+```
+
+Contains:
+
+```
+email
+first_name
+last_name
+roles
+membership
+```
+
+**User preferences**
+
+```
+UserPreference
+```
+
+Contains:
+
+```
+birth_year
+height_in
+current_weight_lb
+goal_weight_lb
+eating_style
+meal_type
+macro_preset
+prep
+glp1_status
+glp1_dosage
+allergy_codes
+other_allergy
+onboarding_completed
+```
+
+Recipe generation **now uses UserPreference** as the primary source.
+
+---
+
+### 8. Legacy code still present (cleanup later)
+
+The following are legacy and should eventually be removed:
+
+```
+POST /prefs/save
+UserProfile recipe fields
+duplicate allergy helper (already removed once)
+```
+
+They are currently harmless but no longer used by the new UI.
+
+---
+
+# Current Status
+
+Working end-to-end:
+
+```
+WordPress SSO
+   ↓
+/login
+   ↓
+onboarding
+   ↓
+preferences API
+   ↓
+my-recipe UI
+   ↓
+recipe generation
+   ↓
+Ollama
+   ↓
+RecipeResult storage
+```
+
+System is stable and generating recipes successfully.
+
+---
+
+# Next Recommended Improvements
+
+High-value cleanup tasks:
+
+1. Split large `app.py` into:
+
+   ```
+   recipe_service.py
+   auth_service.py
+   ```
+
+2. Remove legacy route:
+
+   ```
+   /prefs/save
+   ```
+
+3. Move recipe engine helpers out of `app.py`.
+
+4. Add logging for generation:
+
+```
+logger.info("recipe_generate user=%s model=%s", user_id, model)
+```
+
+---
+
+If you want, the **next thread should probably cover one extremely important architectural improvement** we discussed earlier that will massively reduce AI calls:
+
+**Recipe Variant Cache Architecture**
+
+It is the key piece before scaling Lobos.
+
+[1]: https://time.is/San_Jose%2C_United_States?utm_source=chatgpt.com "Time in San Jose, California, United States now"
+
+
 ## 2026-03-13 8:19 AM PT - Preferences UI v2 and app.py generation alignment
 
 Completed:

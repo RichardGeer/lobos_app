@@ -1,6 +1,6 @@
 this is where we left off
 https://github.com/RichardGeer/lobos_app/blob/main/docs/PROJECT_CONTEXT.md
-app.py
+and my app.py
 https://github.com/RichardGeer/lobos_app/blob/main/app.py
 and preferences.py
 https://github.com/RichardGeer/lobos_app/blob/main/preferences.py
@@ -12,6 +12,28 @@ db
 https://github.com/RichardGeer/lobos_app/blob/main/docs/currentDBschema.sql
 and the rest in my git
 https://github.com/RichardGeer/lobos_app
+let us do 
+Split large app.py into:
+
+recipe_service.py
+auth_service.py
+
+
+Remove legacy route:
+
+/prefs/save
+
+
+Move recipe engine helpers out of app.py.
+
+Add logging for generation:
+
+logger.info("recipe_generate user=%s model=%s", user_id, model)
+also 
+architectural improvement we discussed earlier that will massively reduce AI calls:
+
+Recipe Variant Cache Architecture
+later
 
 everything looks good with a few issues
 for landing.html
