@@ -1,122 +1,628 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>Lobos - My Recipe</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; margin: 24px; }
-    .grid { display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start; }
-    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
-
-    h1 { margin: 0 0 12px 0; font-size: 22px; }
-    h2 { margin: 0 0 10px 0; font-size: 16px; }
-    .btn { padding: 11px 14px; border-radius: 10px; border: 1px solid #bbb; cursor: pointer; font-size: 14px; display:inline-block; text-decoration:none; }
-    .btn-primary { border-color: #2b6cb0; background: #2b6cb0; color: white; }
-    .btn-save { border-color: #0f766e; background: #0f766e; color: white; }
-    .muted { color:#666; font-size: 13px; }
-    .warn { background:#fff7ed; border:1px solid #fed7aa; padding:10px; border-radius:10px; }
-    pre { white-space: pre-wrap; word-break: break-word; background: #fafafa; border: 1px solid #eee; padding: 12px; border-radius: 12px; }
-
-    .right-grid { display:grid; grid-template-columns: 320px 1fr; gap:16px; }
-    .history-title { font-size: 13px; color:#444; margin-bottom: 8px; }
-    .history-card {
-      display:block; text-decoration:none; color: inherit;
-      border: 1px solid #ddd; border-radius: 10px; padding: 10px 12px;
-      margin-bottom: 10px;
+    :root
+    {
+      --bg: #f6f7fb;
+      --card: #ffffff;
+      --border: #d9deea;
+      --text: #18202a;
+      --muted: #5f6b7a;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --success: #166534;
+      --danger: #b91c1c;
+      --shadow: 0 8px 26px rgba(16, 24, 40, 0.08);
+      --radius: 16px;
     }
-    .history-card.active { border-color:#2b6cb0; box-shadow: 0 0 0 2px rgba(43,108,176,.12); background:#f5f9ff; }
-    .history-main { font-weight: 600; }
-    .history-sub { font-size: 12px; color:#666; margin-top: 4px; }
+
+    *
+    {
+      box-sizing: border-box;
+    }
+
+    body
+    {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+
+    .page
+    {
+      max-width: 1360px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    .header
+    {
+      margin-bottom: 20px;
+    }
+
+    .header h1
+    {
+      margin: 0 0 8px 0;
+      font-size: 32px;
+    }
+
+    .header p
+    {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .nav
+    {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .nav a
+    {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .layout
+    {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .card
+    {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    .card h2
+    {
+      margin: 0 0 8px 0;
+      font-size: 20px;
+    }
+
+    .card h3
+    {
+      margin: 0 0 8px 0;
+      font-size: 16px;
+    }
+
+    .subtle
+    {
+      color: var(--muted);
+      font-size: 14px;
+      margin: 0 0 14px 0;
+    }
+
+    .section
+    {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      background: #fbfcff;
+      margin-top: 14px;
+    }
+
+    label
+    {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+
+    input[type="text"],
+    select,
+    textarea
+    {
+      width: 100%;
+      border: 1px solid #c9d2e3;
+      border-radius: 12px;
+      padding: 10px 12px;
+      font: inherit;
+      background: #fff;
+      color: var(--text);
+    }
+
+    textarea
+    {
+      min-height: 92px;
+      resize: vertical;
+    }
+
+    .grid-2
+    {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .checkbox-list
+    {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .checkbox-item
+    {
+      display: flex;
+      align-items: start;
+      gap: 8px;
+      font-size: 14px;
+      background: #fff;
+      border: 1px solid #e4e8f0;
+      border-radius: 12px;
+      padding: 10px 12px;
+    }
+
+    .checkbox-item input
+    {
+      margin-top: 3px;
+    }
+
+    .row
+    {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .row label.inline
+    {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    button
+    {
+      border: 0;
+      border-radius: 12px;
+      padding: 11px 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .btn-primary
+    {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover
+    {
+      background: var(--accent-hover);
+    }
+
+    .btn-secondary
+    {
+      background: #e8eefc;
+      color: #1741a6;
+    }
+
+    .status
+    {
+      min-height: 22px;
+      font-size: 14px;
+      font-weight: 700;
+      margin-top: 12px;
+    }
+
+    .status.ok
+    {
+      color: var(--success);
+    }
+
+    .status.err
+    {
+      color: var(--danger);
+    }
+
+    .history-list
+    {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .history-chip
+    {
+      display: inline-block;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      text-decoration: none;
+      color: var(--text);
+      background: #fff;
+      font-size: 13px;
+    }
+
+    .history-chip.active
+    {
+      border-color: #8fb1ff;
+      background: #edf4ff;
+      font-weight: 700;
+    }
+
+    .error-box
+    {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
+      border-radius: 12px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+      white-space: pre-wrap;
+    }
+
+    pre.recipe
+    {
+      margin: 0;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+      background: #0f172a;
+      color: #e5eefc;
+      border-radius: 16px;
+      padding: 18px;
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+
+    .small-note
+    {
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 10px;
+    }
+
+    @media (max-width: 1040px)
+    {
+      .layout
+      {
+        grid-template-columns: 1fr;
+      }
+
+      .grid-2
+      {
+        grid-template-columns: 1fr;
+      }
+
+      .page
+      {
+        padding: 16px;
+      }
+    }
   </style>
 </head>
 <body>
-  <h1>Lobos</h1>
+  <div class="page">
+    <div class="header">
+      <h1>Lobos</h1>
+      <p>Adjust recipe-related preferences on the left, then generate and review recipes on the right.</p>
 
-  <div class="grid">
-    <!-- LEFT -->
-    <div class="card">
-      <h2>Recipe generation</h2>
-
-      <form method="post" action="/recipe/generate">
-        <input type="hidden" name="token" value="{{ token }}" />
-
-        <label style="display:block; margin: 8px 0;">
-          <input type="checkbox" name="quality_mode" value="1" {% if quality_mode %}checked{% endif %} />
-          Quality mode (slower, more consistent formatting)
-        </label>
-        <div class="muted">Default is fast mode (mistral).</div>
-
-        <label style="display:block; margin: 12px 0 6px 0;">
-          <input type="checkbox" name="force_new" value="1" />
-          <b>Force new recipe</b> (ignore cache)
-        </label>
-        <div class="muted">Otherwise we reuse a saved recipe for the same preferences (within {{ cache_age_days }} days).</div>
-
-        <div style="margin-top: 12px;">
-          <button class="btn btn-primary" type="submit">Generate Recipe</button>
-        </div>
-
-        <div class="muted" style="margin-top: 8px;">
-          Auto-retry: if fast output fails validation, we retry once with quality model.
-        </div>
-      </form>
-
-      <hr style="border:none;border-top:1px solid #eee;margin:14px 0;" />
-
-      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <a class="btn btn-save" href="/landing?token={{ token }}">Back to Preferences</a>
-        <a class="btn" href="/ai-prompt?token={{ token }}">AI prompt</a>
-        <a class="btn" href="/me?token={{ token }}">/me debug</a>
+      <div class="nav">
+        <a href="/landing{% if request.url.query %}?{{ request.url.query }}{% endif %}">Back to Preferences</a>
+        <a href="/prompt{% if request.url.query %}?{{ request.url.query }}{% endif %}">AI prompt</a>
+        <a href="/me{% if request.url.query %}?{{ request.url.query }}{% endif %}">/me debug</a>
       </div>
     </div>
 
-    <!-- RIGHT -->
-    <div class="card">
-      <h2>Recipes (same preferences)</h2>
+    <div class="layout">
+      <div class="card">
+        <h2>Recipe preferences</h2>
+        <p class="subtle">
+          These values are loaded from your saved preferences and can be updated here without going back to onboarding.
+        </p>
 
-      {% if recipe_error %}
-        <div class="warn">
-          <b>Recipe generation failed</b><br/>
-          <span class="muted">{{ recipe_error }}</span>
+        <div class="section">
+          <h3>Profile-based food settings</h3>
+
+          <div class="grid-2">
+            <div>
+              <label for="eating_style">Eating style</label>
+              <select id="eating_style" name="eating_style">
+                <option value="">Select...</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="glp1_status">GLP-1 status</label>
+              <select id="glp1_status" name="glp1_status">
+                <option value="">Select...</option>
+              </select>
+            </div>
+          </div>
+
+          <div style="margin-top: 12px;">
+            <label for="glp1_dosage">GLP-1 dosage</label>
+            <input id="glp1_dosage" name="glp1_dosage" type="text" maxlength="200" placeholder="Example: 0.5 mg weekly" />
+          </div>
         </div>
-      {% endif %}
 
-      <div class="right-grid">
-        <!-- History -->
-        <div>
-          <div class="history-title">History</div>
+        <div class="section">
+          <h3>Allergies</h3>
+          <div id="allergies_list" class="checkbox-list"></div>
+
+          <div style="margin-top: 12px;">
+            <label for="other_allergy">Other allergy or food issue</label>
+            <textarea id="other_allergy" name="other_allergy" placeholder="Optional free-form note"></textarea>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Save preference changes</h3>
+          <p class="subtle">
+            This updates the same saved preference record used by onboarding.
+          </p>
+          <button id="save_recipe_prefs_btn" class="btn-secondary" type="button">Save Recipe Preferences</button>
+          <div id="prefs_status" class="status"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Recipe generation</h2>
+        <p class="subtle">
+          Generate now using your currently saved preference profile. A later `app.py` pass can make the generator read these fields more deeply.
+        </p>
+
+        <form method="post" action="">
+          <div class="row">
+            <label class="inline">
+              <input type="checkbox" name="quality_mode" value="1" {% if quality_mode %}checked{% endif %} />
+              Quality mode (slower, more consistent formatting)
+            </label>
+
+            <label class="inline">
+              <input type="checkbox" name="force_new" value="1" {% if force_new %}checked{% endif %} />
+              Force new recipe (ignore cache)
+            </label>
+
+            <button class="btn-primary" type="submit">Generate Recipe</button>
+          </div>
+
+          <div class="small-note">
+            Default is fast mode. If fast output fails validation, your current flow may retry with a quality model.
+          </div>
+
+          {% if cache_age_days is defined %}
+          <div class="small-note">
+            Cache reuse window: {{ cache_age_days }} days.
+          </div>
+          {% endif %}
+        </form>
+
+        <div class="section">
+          <h3>Recipes (same preferences)</h3>
+
+          {% if recipe_error %}
+            <div class="error-box">{{ recipe_error }}</div>
+          {% endif %}
+
+          <h3 style="margin-top: 0;">History</h3>
 
           {% if history and history|length > 0 %}
-            {% for r in history %}
-              {% set is_active = (selected_recipe_id == r.id) %}
-              <a class="history-card {% if is_active %}active{% endif %}"
-                 href="/my-recipe?token={{ token }}&qm={1 if quality_mode else 0}&rid={{ r.id }}">
-                <div class="history-main">
-                  {{ r.title if r.title else ('#' ~ r.id) }}
-                </div>
-                <div class="history-sub">
-                  {{ r.model }}<br/>
-                  {{ r.created_at }}
-                </div>
-              </a>
-            {% endfor %}
+            <div class="history-list">
+              {% for r in history %}
+                {% set is_active = (selected_recipe_id == r.id) %}
+                <a
+                  class="history-chip {% if is_active %}active{% endif %}"
+                  href="?selected_recipe_id={{ r.id }}{% if request.url.query %}&{{ request.url.query }}{% endif %}"
+                >
+                  {{ r.title if r.title else ('#' ~ r.id) }} · {{ r.model }} · {{ r.created_at }}
+                </a>
+              {% endfor %}
+            </div>
           {% else %}
-            <div class="muted">No recipes yet.</div>
+            <div class="subtle">No recipes yet.</div>
           {% endif %}
         </div>
 
-        <!-- Selected -->
-        <div>
-          <h2 style="margin-top:0;">Selected recipe</h2>
+        <div class="section">
+          <h3>Selected recipe</h3>
+
           {% if recipe_text %}
-            <div class="muted">Model used: <b>{{ recipe_model_used }}</b></div>
-            <pre>{{ recipe_text }}</pre>
+            {% if recipe_model_used %}
+              <div class="small-note" style="margin-bottom: 12px;">Model used: {{ recipe_model_used }}</div>
+            {% endif %}
+            <pre class="recipe">{{ recipe_text }}</pre>
           {% else %}
-            <div class="muted">No recipe yet. Click “Generate Recipe”.</div>
+            <div class="subtle">No recipe yet. Click Generate Recipe.</div>
           {% endif %}
         </div>
       </div>
     </div>
   </div>
+
+  <script>
+    function qs(id)
+    {
+      return document.getElementById(id);
+    }
+
+    function getTokenQuerySuffix()
+    {
+      const token = new URLSearchParams(window.location.search).get("token");
+      if (!token)
+      {
+        return "";
+      }
+      return "?token=" + encodeURIComponent(token);
+    }
+
+    async function apiGet(path)
+    {
+      const response = await fetch(path + getTokenQuerySuffix(), {
+        credentials: "same-origin"
+      });
+
+      if (!response.ok)
+      {
+        const text = await response.text();
+        throw new Error(text || ("GET failed: " + response.status));
+      }
+
+      return response.json();
+    }
+
+    async function apiPost(path, payload)
+    {
+      const response = await fetch(path + getTokenQuerySuffix(), {
+        method: "POST",
+        credentials: "same-origin",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload || {})
+      });
+
+      if (!response.ok)
+      {
+        const text = await response.text();
+        throw new Error(text || ("POST failed: " + response.status));
+      }
+
+      return response.json();
+    }
+
+    function emptyToNull(value)
+    {
+      const trimmed = (value || "").trim();
+      return trimmed === "" ? null : trimmed;
+    }
+
+    function setSelectOptions(selectId, options, selectedValue)
+    {
+      const select = qs(selectId);
+      select.innerHTML = "";
+
+      const defaultOption = document.createElement("option");
+      defaultOption.value = "";
+      defaultOption.textContent = "Select...";
+      select.appendChild(defaultOption);
+
+      for (const optionValue of options || [])
+      {
+        const option = document.createElement("option");
+        option.value = optionValue;
+        option.textContent = optionValue;
+        if (optionValue === (selectedValue || ""))
+        {
+          option.selected = true;
+        }
+        select.appendChild(option);
+      }
+    }
+
+    function renderAllergies(options, selectedCodes)
+    {
+      const selectedSet = new Set(selectedCodes || []);
+      const container = qs("allergies_list");
+      container.innerHTML = "";
+
+      for (const item of options || [])
+      {
+        const wrapper = document.createElement("label");
+        wrapper.className = "checkbox-item";
+
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.value = item.code;
+        input.checked = selectedSet.has(item.code);
+
+        const text = document.createElement("span");
+        text.textContent = item.label;
+
+        wrapper.appendChild(input);
+        wrapper.appendChild(text);
+        container.appendChild(wrapper);
+      }
+    }
+
+    function getSelectedAllergyCodes()
+    {
+      return Array.from(document.querySelectorAll("#allergies_list input[type='checkbox']:checked"))
+        .map((x) => x.value);
+    }
+
+    function setValue(id, value)
+    {
+      const el = qs(id);
+      el.value = value === null || value === undefined ? "" : value;
+    }
+
+    function buildRecipePreferencePayload()
+    {
+      return {
+        allergy_codes: getSelectedAllergyCodes(),
+        other_allergy: emptyToNull(qs("other_allergy").value),
+        eating_style: emptyToNull(qs("eating_style").value),
+        glp1_status: emptyToNull(qs("glp1_status").value),
+        glp1_dosage: emptyToNull(qs("glp1_dosage").value)
+      };
+    }
+
+    function setStatus(message, isError)
+    {
+      const el = qs("prefs_status");
+      el.textContent = message || "";
+      el.className = "status " + (isError ? "err" : "ok");
+    }
+
+    async function loadRecipePreferences()
+    {
+      const [optionsData, meData] = await Promise.all([
+        apiGet("/api/preferences/options"),
+        apiGet("/api/preferences/me")
+      ]);
+
+      setSelectOptions("eating_style", optionsData.eating_style_options, meData.eating_style);
+      setSelectOptions("glp1_status", optionsData.glp1_status_options, meData.glp1_status);
+      renderAllergies(optionsData.allergies, meData.allergy_codes);
+      setValue("other_allergy", meData.other_allergy);
+      setValue("glp1_dosage", meData.glp1_dosage);
+    }
+
+    qs("save_recipe_prefs_btn").addEventListener("click", async function ()
+    {
+      try
+      {
+        await apiPost("/api/preferences/me", buildRecipePreferencePayload());
+        setStatus("Recipe preferences saved.", false);
+      }
+      catch (err)
+      {
+        setStatus("Save failed: " + (err && err.message ? err.message : err), true);
+      }
+    });
+
+    loadRecipePreferences().catch(function (err)
+    {
+      setStatus("Failed to load recipe preferences: " + (err && err.message ? err.message : err), true);
+    });
+  </script>
 </body>
 </html>

@@ -25,7 +25,6 @@ from models import UserAllergy
 from models import UserPreference
 from models import UserWeightLog
 
-
 router = APIRouter(prefix="/api/preferences", tags=["preferences"])
 
 LOBOS_JWT_SECRET = os.getenv("LOBOS_JWT_SECRET", "").strip()
@@ -47,17 +46,14 @@ class PreferencesOptionsResponse(BaseModel):
 
 class PreferencesMeResponse(BaseModel):
     onboarding_completed: bool
-
     birth_year: Optional[int] = None
     current_weight_lb: Optional[float] = None
     goal_weight_lb: Optional[float] = None
     height_in: Optional[int] = None
     height_ft: Optional[int] = None
     height_in_remainder: Optional[int] = None
-
     allergy_codes: list[str] = []
     other_allergy: Optional[str] = None
-
     eating_style: Optional[str] = None
     glp1_status: Optional[str] = None
     glp1_dosage: Optional[str] = None
@@ -68,13 +64,13 @@ class PreferencesSaveRequest(BaseModel):
     current_weight_lb: Optional[float] = Field(default=None, gt=0, le=2000)
     goal_weight_lb: Optional[float] = Field(default=None, gt=0, le=2000)
 
+    # Stored in DB as total inches, but UI can submit feet + inches.
     height_in: Optional[int] = Field(default=None, ge=24, le=96)
     height_ft: Optional[int] = Field(default=None, ge=0, le=8)
     height_in_remainder: Optional[int] = Field(default=None, ge=0, le=11)
 
     allergy_codes: list[str] = Field(default_factory=list)
     other_allergy: Optional[str] = Field(default=None, max_length=1000)
-
     eating_style: Optional[str] = Field(default=None, max_length=200)
     glp1_status: Optional[str] = Field(default=None, max_length=200)
     glp1_dosage: Optional[str] = Field(default=None, max_length=200)
@@ -118,13 +114,10 @@ def get_token_from_request(
 ) -> str:
     if token_query:
         return token_query
-
     if authorization and authorization.lower().startswith("bearer "):
         return authorization[7:].strip()
-
     if token_cookie:
         return token_cookie
-
     raise HTTPException(status_code=401, detail="Missing token")
 
 
@@ -174,8 +167,8 @@ def get_current_lobos_user_id(
         .where(ExternalIdentity.issuer == issuer)
         .where(ExternalIdentity.external_user_id == external_user_id)
     )
-    identity = db.execute(stmt).scalar_one_or_none()
 
+    identity = db.execute(stmt).scalar_one_or_none()
     if identity is None:
         raise HTTPException(status_code=404, detail="User identity not found")
 
@@ -277,6 +270,7 @@ def get_preferences_options(
         ],
     )
 
+
 @router.get("/me", response_model=PreferencesMeResponse)
 def get_my_preferences(
     db: Session = Depends(get_db),
@@ -318,9 +312,7 @@ def save_my_preferences(
     prefs.glp1_dosage = payload.glp1_dosage
     prefs.updated_at = datetime.now(timezone.utc)
 
-    db.execute(
-        delete(UserAllergy).where(UserAllergy.lobos_user_id == lobos_user_id)
-    )
+    db.execute(delete(UserAllergy).where(UserAllergy.lobos_user_id == lobos_user_id))
 
     if payload.allergy_codes:
         option_stmt = (
@@ -351,7 +343,6 @@ def save_my_preferences(
             .limit(1)
         )
         latest = db.execute(latest_stmt).scalar_one_or_none()
-
         current_weight_decimal = Decimal(str(payload.current_weight_lb))
 
         should_insert_weight_log = (
@@ -371,7 +362,6 @@ def save_my_preferences(
 
     db.commit()
     db.refresh(prefs)
-
     return serialize_preferences(db, prefs, lobos_user_id)
 
 
