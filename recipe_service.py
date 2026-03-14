@@ -713,23 +713,28 @@ def get_user_cached_recipe(
     db,
     user_id: str,
     request_hash: str,
+    model: Optional[str] = None,
 ) -> Optional[RecipeResult]:
     cutoff = cache_cutoff_ts()
 
-    return (
+    query = (
         db.query(RecipeResult)
         .filter(RecipeResult.user_id == user_id)
         .filter(RecipeResult.request_hash == request_hash)
         .filter(RecipeResult.created_at >= cutoff)
-        .order_by(RecipeResult.created_at.desc())
-        .first()
     )
+
+    if model:
+        query = query.filter(RecipeResult.model == model)
+
+    return query.order_by(RecipeResult.created_at.desc()).first()
 
 
 def find_shared_recipe_candidates(
     db,
     request_hash: str,
     exclude_user_id: Optional[str] = None,
+    model: Optional[str] = None,
     limit: int = RECIPE_SHARED_POOL_SCAN_LIMIT,
 ) -> List[RecipeResult]:
     cutoff = cache_cutoff_ts()
@@ -743,6 +748,9 @@ def find_shared_recipe_candidates(
 
     if exclude_user_id:
         query = query.filter(RecipeResult.user_id != exclude_user_id)
+
+    if model:
+        query = query.filter(RecipeResult.model == model)
 
     return query.limit(limit).all()
 
@@ -774,32 +782,50 @@ def get_cached_recipe(
     db,
     user_id: str,
     request_hash: str,
+    model: Optional[str] = None,
 ) -> Optional[RecipeResult]:
-    user_row = get_user_cached_recipe(db, user_id, request_hash)
+    user_row = get_user_cached_recipe(db, user_id, request_hash, model=model)
     if user_row is not None:
-        logger.info("recipe_user_cache_hit user=%s recipe_id=%s", user_id, user_row.id)
+        logger.info(
+            "recipe_user_cache_hit user=%s recipe_id=%s model=%s",
+            user_id,
+            user_row.id,
+            user_row.model,
+        )
         return user_row
 
     return None
-
 
 def get_or_clone_shared_recipe(
     db,
     user_id: str,
     request_payload: Dict[str, Any],
+    want_quality: Any,
 ) -> Optional[RecipeResult]:
     request_hash = hash_request(request_payload)
     overlay_json = build_overlay_json(request_payload)
+    target_model = QUALITY_MODEL if normalize_bool(want_quality) else FAST_MODEL
 
-    user_row = get_user_cached_recipe(db, user_id, request_hash)
+    user_row = get_user_cached_recipe(
+        db,
+        user_id,
+        request_hash,
+        model=target_model,
+    )
     if user_row is not None:
-        logger.info("recipe_user_cache_hit user=%s recipe_id=%s", user_id, user_row.id)
+        logger.info(
+            "recipe_user_cache_hit user=%s recipe_id=%s model=%s",
+            user_id,
+            user_row.id,
+            user_row.model,
+        )
         return user_row
 
     shared_candidates = find_shared_recipe_candidates(
         db=db,
         request_hash=request_hash,
         exclude_user_id=user_id,
+        model=target_model,
         limit=RECIPE_SHARED_POOL_SCAN_LIMIT,
     )
 
@@ -814,6 +840,7 @@ def get_or_clone_shared_recipe(
         request_payload=request_payload,
         request_hash=request_hash,
     )
+
 
 
 def list_recipes_for_request(

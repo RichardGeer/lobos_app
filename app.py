@@ -393,7 +393,9 @@ def generate_recipe(
                 db=db,
                 user_id=user_id,
                 request_payload=request_payload,
+                want_quality=want_quality,
             )
+
 
             if cached is not None:
                 logger.info("recipe_cache_hit user=%s recipe_id=%s", user_id, cached.id)
